@@ -18,7 +18,6 @@ type Loaded = {
 };
 
 function readLoaded(): Loaded {
-  if (typeof window === "undefined") return { profile: null, data: null, demo: false };
   const profile = loadProfileLocal();
   try {
     const raw = sessionStorage.getItem("forager:lastFood");
@@ -43,31 +42,37 @@ function readLoaded(): Loaded {
 
 export default function ScanFoodResultPage() {
   const router = useRouter();
-  const [{ profile, data, demo, previewUrl }] = useState<Loaded>(readLoaded);
+  const [loaded, setLoaded] = useState<Loaded>({
+    profile: null,
+    data: null,
+    demo: false,
+  });
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !profile) {
-      router.replace("/onboarding");
-    }
-  }, [profile, router]);
+    const next = readLoaded();
+    if (!next.profile) router.replace("/onboarding");
+    setLoaded(next);
+    setMounted(true);
+  }, [router]);
 
-  if (!profile || !data) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Loading…
-      </main>
-    );
+  if (!mounted || !loaded.profile || !loaded.data) {
+    return <main className="min-h-screen" suppressHydrationWarning />;
   }
 
   return (
     <>
       <AppHeader backHref="/scan/food" />
-      {demo && (
+      {loaded.demo && (
         <div className="max-w-xl mx-auto px-5 pt-2">
           <DemoBanner />
         </div>
       )}
-      <ScanFoodResult initial={data} profile={profile} previewUrl={previewUrl} />
+      <ScanFoodResult
+        initial={loaded.data}
+        profile={loaded.profile}
+        previewUrl={loaded.previewUrl}
+      />
       <BottomNav />
     </>
   );

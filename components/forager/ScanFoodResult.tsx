@@ -11,6 +11,7 @@ import { SafetyNote } from "./SafetyNote";
 import { Pill } from "./Pill";
 import { useToast } from "./ToastProvider";
 import { analyzeFood } from "@/lib/forager-api";
+import { useT } from "@/lib/forager-i18n-context";
 import type { AnalyzeFoodResponse, UserProfile } from "@/lib/forager-types";
 
 export function ScanFoodResult({
@@ -24,6 +25,7 @@ export function ScanFoodResult({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useT();
   const [data, setData] = useState(initial);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [refining, setRefining] = useState(false);
@@ -40,16 +42,16 @@ export function ScanFoodResult({
       // We don't have the original file here — re-derive a Blob from the previewUrl.
       const blob = previewUrl ? await dataUrlToFile(previewUrl, "meal.jpg") : undefined;
       if (!blob) {
-        toast.show("Try another photo to refine.", "default");
+        toast.show(t("foodResult.toast.tryAnother"), "default");
         setRefining(false);
         return;
       }
       const res = await analyzeFood(blob, profile, answers);
       if (res.data) {
         setData(res.data);
-        toast.show("Refined.", "success");
+        toast.show(t("foodResult.toast.refined"), "success");
       } else {
-        toast.show("Couldn't refine. Showing original estimate.", "error");
+        toast.show(t("foodResult.toast.couldnt"), "error");
       }
     } finally {
       setRefining(false);
@@ -60,9 +62,9 @@ export function ScanFoodResult({
     if (profile.privacy.saveMealHistory) {
       // Stub: real impl would write to a meal_history table
       console.log("[forager] log meal", { dish: data.dish, ts: Date.now() });
-      toast.show("Logged.", "success");
+      toast.show(t("foodResult.toast.logged"), "success");
     } else {
-      toast.show("Meal history is off — turn it on in your profile to log.", "default");
+      toast.show(t("foodResult.toast.historyOff"), "default");
     }
   };
 
@@ -79,7 +81,7 @@ export function ScanFoodResult({
           <div className="p-5">
             <div className="flex items-center gap-2 mb-2">
               <span className="rounded-full bg-accent-soft text-accent px-2.5 py-1 text-xs font-bold">
-                {matchPct}% match
+                {matchPct}% {t("foodResult.matchSuffix")}
               </span>
               {data.cuisine && (
                 <span className="text-xs text-muted-foreground">{data.cuisine}</span>
@@ -90,7 +92,7 @@ export function ScanFoodResult({
             {data.ingredients.length > 0 && (
               <>
                 <h3 className="mt-5 mb-2 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-                  Likely ingredients
+                  {t("foodResult.likelyIngredients")}
                 </h3>
                 <div className="flex flex-wrap gap-2">
                   {data.ingredients.map((i) => (
@@ -114,9 +116,9 @@ export function ScanFoodResult({
 
         {data.followUpQuestions.length > 0 && data.confidence < 0.85 && (
           <div className="forager-card p-5">
-            <h2 className="text-base font-semibold">A couple more details</h2>
+            <h2 className="text-base font-semibold">{t("foodResult.followup.heading")}</h2>
             <p className="text-xs text-muted-foreground mt-1">
-              These sharpen the macro estimate.
+              {t("foodResult.followup.note")}
             </p>
             <div className="mt-4 space-y-4">
               {data.followUpQuestions.map((q) => (
@@ -143,34 +145,34 @@ export function ScanFoodResult({
               onClick={onRefine}
               disabled={refining || Object.keys(answers).length === 0}
             >
-              <Sparkles /> {refining ? "Refining…" : "Refine estimate"}
+              <Sparkles /> {refining ? t("foodResult.refining") : t("foodResult.refine")}
             </Button>
           </div>
         )}
 
         <div className="forager-card p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
-            <h2 className="text-base font-semibold">Estimated macros</h2>
+            <h2 className="text-base font-semibold">{t("foodResult.estimatedMacros")}</h2>
             <ConfidenceBadge level={macroLevel} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <MacroRangeBadge
-              label="Calories"
+              label={t("macros.calories")}
               range={{ min: data.macros.caloriesMin, max: data.macros.caloriesMax }}
               unit="kcal"
             />
             <MacroRangeBadge
-              label="Protein"
+              label={t("macros.protein")}
               range={{ min: data.macros.proteinMinG, max: data.macros.proteinMaxG }}
               unit="g"
             />
             <MacroRangeBadge
-              label="Carbs"
+              label={t("macros.carbs")}
               range={{ min: data.macros.carbsMinG, max: data.macros.carbsMaxG }}
               unit="g"
             />
             <MacroRangeBadge
-              label="Fat"
+              label={t("macros.fat")}
               range={{ min: data.macros.fatMinG, max: data.macros.fatMaxG }}
               unit="g"
             />
@@ -182,7 +184,7 @@ export function ScanFoodResult({
 
         {data.logSuggestions.length > 0 && (
           <div className="forager-card p-5">
-            <h2 className="text-base font-semibold mb-3">How to log this</h2>
+            <h2 className="text-base font-semibold mb-3">{t("foodResult.howToLog")}</h2>
             <ul className="space-y-2">
               {data.logSuggestions.map((s, i) => (
                 <li key={i} className="flex gap-2 text-sm">
@@ -196,7 +198,7 @@ export function ScanFoodResult({
 
         {data.nextOrderTips.length > 0 && (
           <div className="forager-card p-5">
-            <h2 className="text-base font-semibold mb-3">Tweak next time</h2>
+            <h2 className="text-base font-semibold mb-3">{t("foodResult.tweakNext")}</h2>
             <ul className="space-y-2">
               {data.nextOrderTips.map((s, i) => (
                 <li key={i} className="flex gap-2 text-sm">
@@ -208,9 +210,7 @@ export function ScanFoodResult({
           </div>
         )}
 
-        <SafetyNote>
-          Macros are an estimate. Verify with the restaurant if you have a strict goal.
-        </SafetyNote>
+        <SafetyNote>{t("foodResult.safety")}</SafetyNote>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 px-5 pb-5 pt-4 bg-gradient-to-t from-background via-background/95 to-background/0">
@@ -221,10 +221,10 @@ export function ScanFoodResult({
             className="rounded-2xl"
             onClick={() => router.push("/scan/food")}
           >
-            <RotateCcw /> Try another
+            <RotateCcw /> {t("foodResult.tryAnother")}
           </Button>
           <Button variant="cta" size="xl" onClick={onLog}>
-            <Check /> Log this meal
+            <Check /> {t("foodResult.logMeal")}
           </Button>
         </div>
       </div>

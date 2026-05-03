@@ -6,6 +6,7 @@ import { MacroRangeBadge } from "./MacroRangeBadge";
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { AllergenFlag, intersectAllergens } from "./AllergenFlag";
 import { TimeCard } from "./TimeCard";
+import { useT } from "@/lib/forager-i18n-context";
 import { cn } from "@/lib/utils";
 
 function formatPriceRange(rec: ChatRecommendation): string | null {
@@ -24,6 +25,7 @@ export function RecommendationCard({
   isTopPick?: boolean;
   profile: UserProfile;
 }) {
+  const { t } = useT();
   const flags = rec.order
     ? intersectAllergens(profile.dietary.allergens, [rec.order])
     : [];
@@ -37,7 +39,7 @@ export function RecommendationCard({
     >
       {isTopPick && (
         <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-accent text-accent-foreground px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider">
-          Top pick
+          {t("rec.topPick")}
         </div>
       )}
       <div className="flex items-start justify-between gap-3">
@@ -65,7 +67,7 @@ export function RecommendationCard({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline"
                   >
-                    <Utensils size={11} /> View menu
+                    <Utensils size={11} /> {t("rec.viewMenu")}
                   </a>
                 </>
               )}
@@ -85,13 +87,13 @@ export function RecommendationCard({
         <div className="mt-3 rounded-2xl bg-primary-soft/60 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="text-[11px] uppercase tracking-wider text-primary font-semibold">
-              Order this
+              {t("rec.orderThis")}
             </div>
             {formatPriceRange(rec) && (
               <div className="text-[11px] font-semibold text-primary">
                 {formatPriceRange(rec)}
                 <span className="ml-1 font-normal text-muted-foreground">
-                  (est.{rec.price_confidence ? ` · ${rec.price_confidence}` : ""})
+                  ({t("rec.estPrefix")}{rec.price_confidence ? ` · ${rec.price_confidence}` : ""})
                 </span>
               </div>
             )}
@@ -109,22 +111,22 @@ export function RecommendationCard({
       )}
 
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <MacroRangeBadge label="Calories" text={rec.calories} />
-        <MacroRangeBadge label="Protein" text={rec.protein} />
-        <MacroRangeBadge label="Carbs" text={rec.carbs} />
-        <MacroRangeBadge label="Fat" text={rec.fat} />
+        <MacroRangeBadge label={t("macros.calories")} text={rec.calories} />
+        <MacroRangeBadge label={t("macros.protein")} text={rec.protein} />
+        <MacroRangeBadge label={t("macros.carbs")} text={rec.carbs} />
+        <MacroRangeBadge label={t("macros.fat")} text={rec.fat} />
       </div>
 
       {rec.confidence && (
         <div className="mt-3">
-          <ConfidenceBadge level={rec.confidence} prefix="Macros" />
+          <ConfidenceBadge level={rec.confidence} prefix={t("macros.medium")} />
         </div>
       )}
 
       {rec.why && (
         <div className="mt-3">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Why
+            {t("rec.why")}
           </div>
           <p className="text-sm mt-1 leading-relaxed">{rec.why}</p>
         </div>
@@ -133,7 +135,7 @@ export function RecommendationCard({
       {rec.tradeoffs && (
         <div className="mt-2">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Tradeoffs
+            {t("rec.tradeoffs")}
           </div>
           <p className="text-sm mt-1 leading-relaxed text-muted-foreground">
             {rec.tradeoffs}
@@ -159,7 +161,7 @@ export function RecommendationCard({
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
           >
-            Open in Maps <ExternalLink size={12} />
+            {t("rec.openInMaps")} <ExternalLink size={12} />
           </a>
         )}
       </div>

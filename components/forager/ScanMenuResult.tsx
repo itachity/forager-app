@@ -18,6 +18,7 @@ import { SafetyNote } from "./SafetyNote";
 import { useToast } from "./ToastProvider";
 import { languageCodeFromDetectedLanguage, phrasesForProfile } from "@/lib/forager-phrases";
 import { LANGUAGE_DISPLAY_NAME } from "@/lib/forager-mappings";
+import { useT } from "@/lib/forager-i18n-context";
 import type { AnalyzeMenuResponse, UserProfile } from "@/lib/forager-types";
 
 function localOrderLine(language: string, dishName: string) {
@@ -50,6 +51,7 @@ export function ScanMenuResult({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useT();
   const [allOpen, setAllOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -83,7 +85,7 @@ export function ScanMenuResult({
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1200);
     } catch {
-      toast.show("Couldn't copy to clipboard.", "error");
+      toast.show(t("menuResult.copyError"), "error");
     }
   };
 
@@ -95,10 +97,11 @@ export function ScanMenuResult({
             <Globe size={12} /> {data.detectedLanguage}
           </div>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-            {data.cuisine} menu
+            {data.cuisine} {t("menuResult.menuSuffix")}
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Translating into {LANGUAGE_DISPLAY_NAME[profile.language.preferredLanguage] ?? "English"}.
+            {t("menuResult.translatingTo")}{" "}
+            {LANGUAGE_DISPLAY_NAME[profile.language.preferredLanguage] ?? "English"}.
           </p>
         </div>
 
@@ -107,7 +110,7 @@ export function ScanMenuResult({
             <div className="flex items-center gap-2 mb-2 text-primary">
               <BookOpen size={16} />
               <h2 className="text-xs font-semibold uppercase tracking-wider">
-                Local etiquette
+                {t("menuResult.localEtiquette")}
               </h2>
             </div>
             <ul className="space-y-1.5 text-sm">
@@ -121,7 +124,7 @@ export function ScanMenuResult({
         )}
 
         <h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold pl-1">
-          Top picks for you
+          {t("menuResult.topPicks")}
         </h2>
         <div className="space-y-3">
           {top.map((item, idx) => {
@@ -172,7 +175,7 @@ export function ScanMenuResult({
                 {item.whyRanked && (
                   <div className="mt-3 rounded-2xl bg-primary-soft/60 p-3">
                     <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">
-                      Why it fits
+                      {t("menuResult.whyItFits")}
                     </p>
                     <p className="text-sm mt-1">{item.whyRanked}</p>
                   </div>
@@ -180,20 +183,20 @@ export function ScanMenuResult({
 
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-xl bg-muted/40 p-2.5">
-                    <p className="uppercase tracking-wider text-muted-foreground">Calories</p>
-                    <p className="mt-1 font-semibold">{item.estimatedMacros?.calories ?? "Est. unavailable"}</p>
+                    <p className="uppercase tracking-wider text-muted-foreground">{t("macros.calories")}</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.calories ?? t("menuResult.estUnavailable")}</p>
                   </div>
                   <div className="rounded-xl bg-muted/40 p-2.5">
-                    <p className="uppercase tracking-wider text-muted-foreground">Protein</p>
-                    <p className="mt-1 font-semibold">{item.estimatedMacros?.protein ?? "Est. unavailable"}</p>
+                    <p className="uppercase tracking-wider text-muted-foreground">{t("macros.protein")}</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.protein ?? t("menuResult.estUnavailable")}</p>
                   </div>
                   <div className="rounded-xl bg-muted/40 p-2.5">
-                    <p className="uppercase tracking-wider text-muted-foreground">Carbs</p>
-                    <p className="mt-1 font-semibold">{item.estimatedMacros?.carbs ?? "Est. unavailable"}</p>
+                    <p className="uppercase tracking-wider text-muted-foreground">{t("macros.carbs")}</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.carbs ?? t("menuResult.estUnavailable")}</p>
                   </div>
                   <div className="rounded-xl bg-muted/40 p-2.5">
-                    <p className="uppercase tracking-wider text-muted-foreground">Fat</p>
-                    <p className="mt-1 font-semibold">{item.estimatedMacros?.fat ?? "Est. unavailable"}</p>
+                    <p className="uppercase tracking-wider text-muted-foreground">{t("macros.fat")}</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.fat ?? t("menuResult.estUnavailable")}</p>
                   </div>
                 </div>
 
@@ -202,7 +205,7 @@ export function ScanMenuResult({
                     <MessageCircle size={16} className="text-accent mt-0.5 shrink-0" />
                     <div>
                       <p className="text-[11px] uppercase tracking-wider text-accent font-semibold">
-                        Say to the server
+                        {t("menuResult.sayToServer")}
                       </p>
                       <p className="text-sm mt-1 font-medium">&ldquo;{item.phraseToOrder}&rdquo;</p>
                       {item.originalName && (
@@ -233,7 +236,9 @@ export function ScanMenuResult({
               onClick={() => setAllOpen((v) => !v)}
             >
               <span className="text-sm font-semibold">
-                {allOpen ? "Hide" : `Show all ${data.rankedItems.length} dishes`}
+                {allOpen
+                  ? t("menuResult.hide")
+                  : `${t("menuResult.showAll")} (${data.rankedItems.length})`}
               </span>
               {allOpen ? (
                 <ChevronUp size={18} className="text-muted-foreground" />
@@ -274,7 +279,7 @@ export function ScanMenuResult({
 
         <div className="forager-card p-5">
           <h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-3">
-            Phrases to say
+            {t("menuResult.phrasesToSay")}
           </h2>
           <ul className="divide-y divide-border/60">
             {phrases.map((p, i) => {
@@ -292,7 +297,7 @@ export function ScanMenuResult({
                     className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                   >
                     <Copy size={12} />
-                    {copiedId === id ? "Copied" : "Copy"}
+                    {copiedId === id ? t("menuResult.copied") : t("menuResult.copy")}
                   </button>
                 </li>
               );
@@ -300,9 +305,7 @@ export function ScanMenuResult({
           </ul>
         </div>
 
-        <SafetyNote>
-          Forager can flag possible risks, but verify allergens and preparation with the restaurant.
-        </SafetyNote>
+        <SafetyNote>{t("menuResult.safety")}</SafetyNote>
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-20 px-5 pb-5 pt-4 bg-gradient-to-t from-background via-background/95 to-background/0">
@@ -313,7 +316,7 @@ export function ScanMenuResult({
             className="w-full rounded-2xl"
             onClick={() => router.push("/scan/menu")}
           >
-            <RotateCcw /> Try another menu
+            <RotateCcw /> {t("menuResult.tryAnother")}
           </Button>
         </div>
       </div>
