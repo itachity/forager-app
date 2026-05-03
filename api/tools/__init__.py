@@ -4,7 +4,6 @@ from typing import Any, Callable
 
 from tools.macros import get_macro_references, search_usda_foods
 from tools.menus import analyze_menu_image_bytes
-from tools.reddit import get_community_signal, search_reddit_website, suggest_subreddits
 from tools.restaurants import search_and_score_restaurants, search_google_restaurants
 
 
@@ -41,25 +40,6 @@ TOOL_DEFINITIONS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_reddit_website",
-            "description": "Temporary Reddit website JSON fallback while waiting for Reddit API approval.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string"},
-                    "subreddits": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "limit": {"type": "integer"},
-                },
-                "required": ["query"],
-            },
-        },
-    },
 ]
 
 
@@ -68,8 +48,5 @@ DISPATCH_TABLE: dict[str, Callable[..., Any]] = {
     "search_and_score_restaurants": search_and_score_restaurants,
     "search_usda_foods": search_usda_foods,
     "get_macro_references": get_macro_references,
-    "suggest_subreddits": suggest_subreddits,
-    "search_reddit_website": search_reddit_website,
-    "get_community_signal": get_community_signal,
     "analyze_menu_image_bytes": analyze_menu_image_bytes,
 }

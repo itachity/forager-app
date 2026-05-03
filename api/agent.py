@@ -10,7 +10,6 @@ from openai import OpenAI
 
 from tools.macros import get_macro_references
 from tools.menus import analyze_menu_image_bytes
-from tools.reddit import get_community_signal, suggest_subreddits
 from tools.restaurants import search_and_score_restaurants
 
 
@@ -139,12 +138,7 @@ class ForagerAgent:
         )
 
         restaurants: list[dict[str, Any]] = []
-        community_signal: dict[str, Any] = {
-            "subreddits": [],
-            "query": None,
-            "community_by_name": {},
-            "raw": {},
-        }
+        community_signal: dict[str, Any] = {"community_by_name": {}}
 
         if resolved_location.get("lat") is not None and resolved_location.get("lng") is not None:
             lat = float(resolved_location["lat"])
@@ -168,24 +162,7 @@ class ForagerAgent:
                 }
             )
 
-            restaurant_names = [r["name"] for r in restaurants]
-
-            # Temporary Reddit website fallback while waiting for official API approval.
-            community_signal = get_community_signal(
-                intent=intent,
-                restaurant_names=restaurant_names,
-            )
-
-            tool_trace.append(
-                {
-                    "tool": "reddit_website_fallback",
-                    "status": "ok",
-                    "query": community_signal.get("query"),
-                    "subreddits": community_signal.get("subreddits"),
-                }
-            )
-
-            # Second pass: rescore with community signal.
+            # Second pass: rescore with current restaurant data.
             restaurants = search_and_score_restaurants(
                 intent=intent,
                 lat=lat,
@@ -357,13 +334,9 @@ class ForagerAgent:
                     '  "lat": "number or null",\n'
                     '  "lng": "number or null",\n'
                     '  "radius_meters": "number",\n'
-                    '  "subreddits": ["string"],\n'
                     '  "needs_restaurant_search": true,\n'
                     '  "needs_macro_estimate": true\n'
                     "}\n\n"
-                    "Subreddits should be relevant to the city/cuisine if possible. "
-                    "Example: Corvallis -> corvallis, oregonstateuniv, oregon. "
-                    "NYC -> AskNYC, FoodNYC, nyc."
                 ),
             },
             {
@@ -460,12 +433,9 @@ class ForagerAgent:
             "radius_meters": profile_radius_meters(user_profile),
             "preferred_order_terms": preferred_order_terms,
             "avoid_order_terms": avoid_order_terms,
-            "subreddits": [],
             "needs_restaurant_search": True,
             "needs_macro_estimate": True,
         }
-
-        fallback_intent["subreddits"] = suggest_subreddits(fallback_intent)
 
         return fallback_intent
 
