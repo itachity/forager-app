@@ -2,14 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, Search, ScanLine, Heart } from "lucide-react";
+import { Compass, Search, ScanLine } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items: { href: string; label: string; Icon: typeof Compass; matches: (p: string) => boolean }[] = [
   { href: "/discover", label: "Discover", Icon: Compass, matches: (p) => p.startsWith("/discover") },
   { href: "/home", label: "Search", Icon: Search, matches: (p) => p === "/home" || p.startsWith("/results") },
   { href: "/scan/food", label: "Scan", Icon: ScanLine, matches: (p) => p.startsWith("/scan") },
-  { href: "/saved", label: "Saved", Icon: Heart, matches: (p) => p.startsWith("/saved") },
 ];
 
 export function BottomNav() {

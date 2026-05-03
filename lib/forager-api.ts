@@ -147,6 +147,10 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
       tradeoffs: strOrUndefined(r.tradeoffs),
       sources_used: Array.isArray(r.sources_used) ? (r.sources_used as string[]) : [],
       google_maps_url: strOrUndefined(r.google_maps_url),
+      lat: typeof r.lat === "number" && Number.isFinite(r.lat) ? r.lat : undefined,
+      lng: typeof r.lng === "number" && Number.isFinite(r.lng) ? r.lng : undefined,
+      website: strOrUndefined(r.website),
+      opening_hours_today: normalizeTodayHours(r.opening_hours_today),
       price: strOrUndefined(r.price) ?? priceLabelFromLevel(r.price_level ?? r.priceLevel),
       price_usd:
         typeof r.price_usd === "number" && Number.isFinite(r.price_usd)
@@ -160,6 +164,21 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
     tool_trace: Array.isArray(raw.tool_trace) ? (raw.tool_trace as ToolTraceEntry[]) : undefined,
     limitations: Array.isArray(raw.limitations) ? (raw.limitations as string[]) : undefined,
     token_usage: normalizeTokenUsage(raw.token_usage),
+  };
+}
+
+
+function normalizeTodayHours(value: unknown): TodayHours | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const v = value as Record<string, unknown>;
+  const openNow = typeof v.open_now === "boolean" ? v.open_now : undefined;
+  const nextChange = strOrUndefined(v.next_change);
+  const summary = strOrUndefined(v.summary);
+  if (openNow == null && !nextChange && !summary) return undefined;
+  return {
+    open_now: openNow ?? false,
+    next_change: nextChange ?? null,
+    summary: summary ?? null,
   };
 }
 
