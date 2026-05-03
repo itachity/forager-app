@@ -61,8 +61,6 @@ def profile_radius_meters(user_profile: dict[str, Any]) -> float:
     return 5000.0
 
 
-
-
 def profile_order_terms(user_profile: dict[str, Any]) -> tuple[list[str], list[str]]:
     preferences = user_profile.get("preferences") if isinstance(user_profile.get("preferences"), dict) else {}
     preferred = _safe_list(preferences.get("preferredOrderTerms"))
