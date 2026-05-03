@@ -175,9 +175,6 @@ export type ChatRecommendation = {
   price_range_usd?: { min: number; max: number };
   price_confidence?: "high" | "medium" | "low";
 
-  /** Short user-review quotes pulled from Google Places (max ~2). Optional. */
-  review_quotes?: string[];
-
   /** Restaurant lat/lng (from Google Places). Used for ResultsMap pins. */
   lat?: number;
   lng?: number;
@@ -252,6 +249,8 @@ export type AnalyzeFoodResponse = {
 
 export type MenuItem = {
   originalName: string;
+  /** Romanization (romaji / pinyin / etc.) of `originalName` for non-Latin scripts. */
+  originalNameRomanized?: string;
   translatedName: string;
   description: string;
   matchScore: number; // 0..10

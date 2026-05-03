@@ -346,151 +346,6 @@ def compute_total_score(
     }
 
 
-def _tokenize_for_review_matching(value: Any) -> set[str]:
-    """Small dependency-free tokenizer for review relevance scoring."""
-    text = str(value or "").lower()
-    words = re.findall(r"[a-zA-Z][a-zA-Z0-9'-]{2,}", text)
-    stop_words = {
-        "the", "and", "for", "with", "this", "that", "was", "were", "are",
-        "you", "your", "they", "them", "have", "has", "had", "but", "not",
-        "very", "really", "place", "food", "good", "great", "nice", "best",
-        "order", "ordered", "restaurant", "time", "also", "always",
-    }
-    return {word for word in words if word not in stop_words}
-
-
-def review_relevance_score(
-    review_text: str,
-    intent: dict[str, Any] | None = None,
-    order_names: list[str] | None = None,
-) -> float:
-    """
-    Score whether a Google review is useful for the food recommendation.
-
-    Google reviews are restaurant-level, not guaranteed menu-item evidence. This
-    keeps service-only or unrelated reviews from appearing as if they support a
-    macro recommendation.
-    """
-    intent = intent or {}
-    order_names = order_names or []
-
-    text = review_text.lower()
-    review_tokens = _tokenize_for_review_matching(text)
-    score = 0.0
-
-    cuisine = str(intent.get("cuisine") or "").lower()
-    craving = str(intent.get("craving") or "").lower()
-    macro_goal = str(intent.get("macro_goal") or "").lower()
-
-    liked_foods = [item.lower() for item in _safe_list(intent.get("liked_foods"))]
-    liked_cuisines = [item.lower() for item in _safe_list(intent.get("liked_cuisines"))]
-    preferred_terms = [item.lower() for item in _safe_list(intent.get("preferred_order_terms"))]
-
-    # Directly matching the eventual order suggestion is strongest when available.
-    for order_name in order_names:
-        order_lower = str(order_name or "").lower().strip()
-        order_tokens = _tokenize_for_review_matching(order_lower)
-        if order_lower and order_lower in text:
-            score += 5.0
-        score += 0.8 * len(order_tokens & review_tokens)
-
-    # Match the user's search/craving and profile food preferences.
-    craving_tokens = _tokenize_for_review_matching(craving)
-    score += 0.45 * len(craving_tokens & review_tokens)
-
-    if cuisine and cuisine in text:
-        score += 1.25
-
-    for item in liked_cuisines:
-        if item and item in text:
-            score += 0.75
-
-    for item in liked_foods:
-        if item and item in text:
-            score += 1.0
-
-    for item in preferred_terms:
-        if item and item in text:
-            score += 0.75
-
-    # Food-quality and macro-relevant signals.
-    food_quality_terms = [
-        "fresh", "ripe", "flavor", "flavorful", "tasty", "delicious", "portion",
-        "protein", "healthy", "light", "grilled", "lean", "bowl", "salad",
-        "chicken", "steak", "fish", "veggie", "vegetable", "salsa", "beans",
-        "rice", "fruit", "smoothie", "acai", "açaí", "poke", "sushi", "taco",
-        "burrito", "burritos", "tacos", "soup", "noodles", "ramen",
-    ]
-    food_hits = sum(1 for term in food_quality_terms if term in text)
-    score += 0.35 * food_hits
-
-    if "protein" in macro_goal and "protein" in text:
-        score += 1.5
-    if "low calorie" in macro_goal and any(term in text for term in ["light", "healthy", "low calorie"]):
-        score += 1.0
-
-    # Service-only reviews are less useful beside a food/macro card.
-    service_terms = [
-        "staff", "service", "cashier", "employee", "worker", "manager", "polite",
-        "friendly", "professional", "customer service",
-    ]
-    service_hits = sum(1 for term in service_terms if term in text)
-    if service_hits and food_hits == 0:
-        score -= 2.0
-
-    # Do not highlight complaint quotes as supporting evidence.
-    negative_terms = [
-        "bad", "terrible", "cold", "stale", "bland", "slow", "rude", "overpriced",
-        "soggy", "dry", "gross", "awful",
-    ]
-    score -= 0.75 * sum(1 for term in negative_terms if term in text)
-
-    return score
-
-
-def extract_review_quotes(
-    raw_place: dict[str, Any],
-    intent: dict[str, Any] | None = None,
-    order_names: list[str] | None = None,
-    max_quotes: int = 2,
-    min_score: float = 1.25,
-) -> list[str]:
-    """
-    Extract the most food-relevant Google review snippets.
-
-    Returns an empty list when reviews are not relevant enough. No quote is
-    better than a misleading service-only quote.
-    """
-    scored_quotes: list[tuple[float, str]] = []
-
-    for review in raw_place.get("reviews", []) or []:
-        text_obj = review.get("text") or review.get("originalText") or {}
-        text = text_obj.get("text") if isinstance(text_obj, dict) else None
-
-        if not text:
-            continue
-
-        cleaned = " ".join(str(text).split())
-        if not cleaned:
-            continue
-
-        score = review_relevance_score(
-            review_text=cleaned,
-            intent=intent,
-            order_names=order_names,
-        )
-        if score < min_score:
-            continue
-
-        if len(cleaned) > 180:
-            cleaned = cleaned[:177].rstrip() + "..."
-
-        scored_quotes.append((score, cleaned))
-
-    scored_quotes.sort(key=lambda item: item[0], reverse=True)
-    return [quote for _, quote in scored_quotes[:max_quotes]]
-
-
 def normalize_place(
     raw_place: dict[str, Any],
     lat: float,
@@ -522,7 +377,6 @@ def normalize_place(
         "primaryType": raw_place.get("primaryType"),
         "types": raw_place.get("types", []),
         # Filled in by enrich_top_candidates() for the top N only.
-        "reviewQuotes": [],
         "websiteUri": None,
         "editorialSummary": None,
         "openingHoursToday": None,
@@ -673,7 +527,7 @@ def score_existing_restaurants(
 # ----------------------- Phase 2: Place Details enrichment -----------------------
 
 PLACE_DETAILS_FIELD_MASK = (
-    "id,reviews,regularOpeningHours,currentOpeningHours,"
+    "id,regularOpeningHours,currentOpeningHours,"
     "websiteUri,editorialSummary,location,priceLevel,utcOffsetMinutes"
 )
 
@@ -885,13 +739,6 @@ async def enrich_top_candidates(
             if new_price_level and not place.get("priceLevel"):
                 place["priceLevel"] = new_price_level
                 place["priceLevelLabel"] = PRICE_LEVEL_LABELS.get(new_price_level)
-
-            # Keep raw payload so review-quote extraction (which reads `reviews`)
-            # works the same as before.
-            merged_raw = dict(place.get("raw") or {})
-            merged_raw["reviews"] = detail.get("reviews") or []
-            place["raw"] = merged_raw
-            place["reviewQuotes"] = extract_review_quotes(merged_raw, intent=intent)
 
         enriched_head.append(place)
 

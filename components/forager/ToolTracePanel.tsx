@@ -88,8 +88,18 @@ function summary(t: ToolTraceEntry): string {
   if (typeof t.count === "number") return `${t.count} results${t.radius_meters ? ` within ${Math.round(t.radius_meters / 1000)} km` : ""}`;
   if (t.queries) return `Queries: ${t.queries.join(", ")}`;
   if (t.weights) {
-    const top = Object.entries(t.weights).sort((a, b) => b[1] - a[1])[0];
-    if (top) return `Top weight: ${top[0]} (${Math.round(top[1] * 100)}%)`;
+    const numeric = Object.entries(t.weights)
+      .map(([key, raw]) => {
+        const value =
+          typeof raw === "number" ? raw : parseFloat(String(raw).replace("%", ""));
+        return [key, Number.isFinite(value) ? value : 0] as const;
+      })
+      .sort((a, b) => b[1] - a[1]);
+    const top = numeric[0];
+    if (top) {
+      const pct = top[1] <= 1 ? Math.round(top[1] * 100) : Math.round(top[1]);
+      return `Top weight: ${top[0]} (${pct}%)`;
+    }
   }
   return "OK";
 }
