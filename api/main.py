@@ -1,7 +1,11 @@
-from fastapi import FastAPI, UploadFile, File
+from typing import Any
+
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Dict, Any
+from pydantic import BaseModel, Field
+
+from agent import ForagerAgent
+
 
 app = FastAPI(title="Forager API")
 
@@ -9,6 +13,7 @@ origins = [
     "http://localhost:3000",
     "https://forager-app.vercel.app",
     "https://forager-app.com",
+    "https://www.forager-app.com",
 ]
 
 app.add_middleware(
@@ -19,48 +24,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+agent = ForagerAgent()
+
+
+class Location(BaseModel):
+    lat: float | None = None
+    lng: float | None = None
+    city: str | None = None
+    country: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str
-    user_profile: Dict[str, Any] = {}
+    user_profile: dict[str, Any] = Field(default_factory=dict)
+    location: Location | None = None
+
 
 @app.get("/health")
-def health():
+def health() -> dict[str, str]:
     return {
         "status": "ok",
-        "service": "forager-api"
+        "service": "forager-api",
     }
+
 
 @app.post("/chat")
-def chat(req: ChatRequest):
-    return {
-        "answer": f"Forager received your request: {req.message}",
-        "tools_used": ["stub_agent"],
-        "recommendations": [
-            {
-                "place": "Example Bowl Spot",
-                "order": "Chicken rice bowl",
-                "estimated_macros": {
-                    "calories": "650-800 kcal",
-                    "protein": "35-50 g",
-                    "carbs": "60-90 g",
-                    "fat": "15-30 g",
-                    "confidence": "medium"
-                },
-                "why": "Cheap, high-protein, and close to campus."
-            }
-        ]
-    }
+async def chat(req: ChatRequest) -> dict[str, Any]:
+    return await agent.run_chat(
+        message=req.message,
+        user_profile=req.user_profile,
+        location=req.location.model_dump() if req.location else {},
+    )
+
 
 @app.post("/analyze-menu")
-async def analyze_menu(file: UploadFile = File(...)):
-    return {
-        "filename": file.filename,
-        "summary": "Menu image received.",
-        "recommendations": [
-            {
-                "dish": "Example translated dish",
-                "reason": "Likely filling and reasonable for a high-protein meal.",
-                "allergen_warning": "Verify ingredients with the restaurant before ordering."
-            }
-        ]
-    }
+async def analyze_menu(
+    file: UploadFile = File(...),
+    goal: str = "healthy low-calorie high-protein meal",
+) -> dict[str, Any]:
+    image_bytes = await file.read()
+
+    return await agent.analyze_menu_upload(
+        image_bytes=image_bytes,
+        filename=file.filename or "menu.jpg",
+        goal=goal,
+    )
