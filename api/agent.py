@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+import ast
 import json
 import os
 import re
@@ -1661,4 +1662,12 @@ class ForagerAgent:
             if start != -1 and end != -1 and end > start:
                 cleaned = cleaned[start:end + 1]
 
-        return json.loads(cleaned)
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            # Nemotron occasionally returns Python-style dict literals on retries.
+            # Safely parse those and re-serialize to strict JSON-compatible types.
+            parsed = ast.literal_eval(cleaned)
+            if not isinstance(parsed, dict):
+                raise
+            return json.loads(json.dumps(parsed))

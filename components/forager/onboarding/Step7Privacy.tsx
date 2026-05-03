@@ -5,12 +5,7 @@ import { StepBody, StepHeader, ToggleRow, type StepProps } from "./_shared";
 export function Step7Privacy({
   profile,
   update,
-  cheatDay,
-  onCheatDay,
-}: StepProps & {
-  cheatDay: boolean;
-  onCheatDay: (v: boolean) => void;
-}) {
+}: StepProps) {
   return (
     <StepBody>
       <StepHeader
@@ -48,16 +43,6 @@ export function Step7Privacy({
               privacy: { ...profile.privacy, useProfileForRecommendations: v },
             })
           }
-        />
-      </div>
-
-      <div className="mt-6 pt-6 border-t border-border/60">
-        <ToggleRow
-          variant="accent"
-          label="Cheat day"
-          description="Temporarily ignore your profile and surface anything tasty."
-          checked={cheatDay}
-          onChange={onCheatDay}
         />
       </div>
     </StepBody>
