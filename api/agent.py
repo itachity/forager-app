@@ -1202,26 +1202,20 @@ class ForagerAgent:
             )
             updated = self.extract_json_from_text(text)
         except Exception as exc:
-            tool_trace.append(
-                {
-                    "tool": "nemotron_grounding_retry",
-                    "status": "skipped",
-                    "reason": "Retry response could not be parsed; keeping original recommendations.",
-                    "error": str(exc),
-                    "ranks": unjustified_ranks,
-                }
+            # Retry is an internal optimization — if the model returns
+            # un-parseable JSON, silently fall back to the original
+            # recommendations so users don't see a confusing trace entry.
+            print(
+                f"[agent] grounding retry parse failed (silently skipped): {exc}",
+                flush=True,
             )
             return parsed
 
         updated_recs = updated.get("recommendations") if isinstance(updated, dict) else None
         if not isinstance(updated_recs, list):
-            tool_trace.append(
-                {
-                    "tool": "nemotron_grounding_retry",
-                    "status": "error",
-                    "error": "retry response missing recommendations",
-                    "ranks": unjustified_ranks,
-                }
+            print(
+                "[agent] grounding retry missing recommendations (silently skipped)",
+                flush=True,
             )
             return parsed
 
@@ -1677,9 +1671,23 @@ class ForagerAgent:
         except (ValueError, SyntaxError):
             pass
 
-        # Final cleanup: drop trailing commas, replace JS-only literals.
-        cleaned2 = re.sub(r",\s*([\]}])", r"\1", cleaned)
+        # Final cleanup pass: handle several common model-output quirks.
+        cleaned2 = cleaned
+        # Strip trailing commas before } or ]
+        cleaned2 = re.sub(r",\s*([\]}])", r"\1", cleaned2)
+        # Replace JS-only literals
         cleaned2 = re.sub(r"\b(Infinity|-Infinity|NaN|undefined)\b", "null", cleaned2)
+        # Strip C/JS-style line comments (// ...)
+        cleaned2 = re.sub(r"(?m)//[^\n]*$", "", cleaned2)
+        # Strip block comments (/* ... */)
+        cleaned2 = re.sub(r"/\*.*?\*/", "", cleaned2, flags=re.DOTALL)
+        # Smart quotes → straight quotes
+        cleaned2 = cleaned2.replace("“", '"').replace("”", '"')
+        cleaned2 = cleaned2.replace("‘", "'").replace("’", "'")
+        # Numbers with leading dot (.5 → 0.5)
+        cleaned2 = re.sub(r"(?<![\d.])\.(\d)", r"0.\1", cleaned2)
+        # Python-style numeric underscores (1_000 → 1000)
+        cleaned2 = re.sub(r"(\d)_(\d)", r"\1\2", cleaned2)
         try:
             return json.loads(cleaned2)
         except json.JSONDecodeError as exc:
