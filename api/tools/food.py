@@ -258,6 +258,52 @@ def normalize_final_food(parsed: dict[str, Any], filename: str) -> dict[str, Any
     }
 
 
+def build_recovery_food_response(structured: dict[str, Any], filename: str, *, record_text: str = "") -> dict[str, Any]:
+    dish = safe_string(structured.get("dish"), "Unknown dish")
+    ingredients = [safe_string(item) for item in safe_list(structured.get("ingredients")) if safe_string(item)]
+    confidence = max(0.0, min(safe_float(structured.get("confidence"), 0.35), 1.0))
+    if dish != "Unknown dish":
+        confidence = max(confidence, 0.35)
+    if ingredients:
+        confidence = max(confidence, 0.45)
+
+    return {
+        "filename": filename,
+        "dish": dish,
+        "confidence": confidence,
+        "cuisine": safe_string(structured.get("cuisine")) or None,
+        "ingredients": ingredients,
+        "detectedLanguage": safe_string(structured.get("detectedLanguage")) or None,
+        "recordText": record_text or None,
+        "followUpQuestions": [
+            {
+                "id": "portion",
+                "question": "How much of the food did you eat?",
+                "options": ["all of it", "half", "three quarters", "not sure"],
+            },
+            {
+                "id": "sauce",
+                "question": "Were there heavy sauces, cheese, cream, or oil?",
+                "options": ["yes", "no", "a little", "not sure"],
+            },
+        ],
+        "macros": {
+            "caloriesMin": 0,
+            "caloriesMax": 0,
+            "proteinMinG": 0,
+            "proteinMaxG": 0,
+            "carbsMinG": 0,
+            "carbsMaxG": 0,
+            "fatMinG": 0,
+            "fatMaxG": 0,
+            "servingNote": "We detected likely foods but couldn't confidently estimate macros. Please refine details.",
+        },
+        "logSuggestions": [dish] if dish != "Unknown dish" else [],
+        "nextOrderTips": [],
+        "tools_used": ["nvidia_nemotron_food_vision", "recovery_from_identification"],
+    }
+
+
 def analyze_food_image_bytes(
     image_bytes: bytes,
     filename: str,
@@ -392,8 +438,16 @@ def analyze_food_image_bytes(
 
     try:
         final = extract_json_from_text(final_text)
-    except Exception as exc:
-        return fallback_food_response(f"Food macro synthesis failed: {exc}", filename=filename)
+    except Exception:
+        recovered = build_recovery_food_response(structured=structured, filename=filename, record_text=record_text)
+        recovered.update(
+            {
+                "record_text": record_text,
+                "structured_identification": structured,
+                "usda_references": usda_references,
+            }
+        )
+        return recovered
 
     normalized = normalize_final_food(final, filename=filename)
     normalized.update(
