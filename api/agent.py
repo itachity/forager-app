@@ -827,6 +827,7 @@ class ForagerAgent:
 
         compact_restaurants = [
             {
+                "place_id": r.get("id"),
                 "name": r.get("name"),
                 "address": r.get("address"),
                 "rating": r.get("rating"),
@@ -899,6 +900,7 @@ class ForagerAgent:
                     '  "recommendations": [\n'
                     "    {\n"
                     '      "rank": 1,\n'
+                    '      "place_id": "string (echo the place_id from Scored restaurants verbatim)",\n'
                     '      "place": "string",\n'
                     '      "address": "string",\n'
                     '      "score": 0,\n'
@@ -948,7 +950,10 @@ class ForagerAgent:
                     f"Tool trace:\n{json.dumps(tool_trace, indent=2)}\n\n"
                     "Generate the final recommendations. Usually return the top 3 restaurants. "
                     "For each restaurant, return at least 3 distinct order_suggestions. "
-                    "Do not collapse the restaurant into one order unless there is truly no reasonable alternative."
+                    "Do not collapse the restaurant into one order unless there is truly no reasonable alternative. "
+                    "CRITICAL: copy `place_id` for each recommendation EXACTLY from the matching entry in "
+                    "`Scored restaurants` (this is how the backend joins your output to Google Places metadata "
+                    "like opening hours, lat/lng, and website). Do not invent, modify, or omit place_id."
                 ),
             },
         ]
@@ -979,7 +984,7 @@ class ForagerAgent:
                 )
 
             parsed["tool_trace"] = tool_trace
-            return self.normalize_chat_response(parsed, restaurants, intent)
+            return self.normalize_chat_response(parsed, restaurants, intent, tool_trace=tool_trace)
         except Exception as exc:
             fallback = self.fallback_final_answer(
                 intent=intent,
@@ -1190,11 +1195,19 @@ class ForagerAgent:
         parsed["recommendations"] = recs
         return parsed
 
+    @staticmethod
+    def _normalize_place_name(value: Any) -> str:
+        """Collapse punctuation/whitespace so 'Foo -- Downtown' matches 'Foo – Downtown'."""
+        text = str(value or "").lower()
+        text = re.sub(r"[^a-z0-9]+", " ", text)
+        return " ".join(text.split())
+
     def normalize_chat_response(
         self,
         parsed: dict[str, Any],
         restaurants: list[dict[str, Any]],
         intent: dict[str, Any],
+        tool_trace: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Keep response backward-compatible while adding order_suggestions."""
         recs = parsed.get("recommendations")
@@ -1202,16 +1215,42 @@ class ForagerAgent:
             parsed["recommendations"] = []
             return parsed
 
-        restaurant_by_name = {
-            str(r.get("name") or "").lower(): r for r in restaurants
-        }
+        restaurant_by_id: dict[str, dict[str, Any]] = {}
+        restaurant_by_norm_name: dict[str, dict[str, Any]] = {}
+        for r in restaurants:
+            rid = str(r.get("id") or "").strip()
+            if rid:
+                restaurant_by_id[rid] = r
+            norm = self._normalize_place_name(r.get("name"))
+            if norm:
+                restaurant_by_norm_name[norm] = r
+
+        match_outcomes = {"id": 0, "name": 0, "miss": 0}
 
         for rec in recs:
             if not isinstance(rec, dict):
                 continue
 
-            place_name = str(rec.get("place") or "").lower()
-            source_restaurant = restaurant_by_name.get(place_name, {})
+            source_restaurant: dict[str, Any] = {}
+            rec_place_id = str(rec.get("place_id") or "").strip()
+            if rec_place_id and rec_place_id in restaurant_by_id:
+                source_restaurant = restaurant_by_id[rec_place_id]
+                match_outcomes["id"] += 1
+            else:
+                norm_rec = self._normalize_place_name(rec.get("place"))
+                if norm_rec and norm_rec in restaurant_by_norm_name:
+                    source_restaurant = restaurant_by_norm_name[norm_rec]
+                    match_outcomes["name"] += 1
+                else:
+                    # Substring fallback: many models truncate or extend names.
+                    if norm_rec:
+                        for key, candidate in restaurant_by_norm_name.items():
+                            if norm_rec in key or key in norm_rec:
+                                source_restaurant = candidate
+                                match_outcomes["name"] += 1
+                                break
+                    if not source_restaurant:
+                        match_outcomes["miss"] += 1
             if not rec.get("review_quotes"):
                 rec["review_quotes"] = source_restaurant.get("reviewQuotes", [])[:2]
 
@@ -1279,6 +1318,26 @@ class ForagerAgent:
                             pass
                     if first.get("price_confidence") and not rec.get("price_confidence"):
                         rec["price_confidence"] = first.get("price_confidence")
+
+        if tool_trace is not None:
+            tool_trace.append(
+                {
+                    "tool": "rec_to_restaurant_match",
+                    "status": "ok",
+                    "matched_by_id": match_outcomes["id"],
+                    "matched_by_name": match_outcomes["name"],
+                    "missed": match_outcomes["miss"],
+                    "with_lat_lng": sum(
+                        1 for r in recs if isinstance(r, dict) and r.get("lat") is not None
+                    ),
+                    "with_hours_today": sum(
+                        1 for r in recs if isinstance(r, dict) and r.get("opening_hours_today")
+                    ),
+                    "with_website": sum(
+                        1 for r in recs if isinstance(r, dict) and r.get("website")
+                    ),
+                }
+            )
 
         return parsed
 
