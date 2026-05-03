@@ -8,26 +8,27 @@ import { SearchPanel } from "@/components/forager/SearchPanel";
 import { ScanEntryCard } from "@/components/forager/ScanEntryCard";
 import { BottomNav } from "@/components/forager/BottomNav";
 import { loadProfileLocal } from "@/lib/forager-profile";
+import { useT } from "@/lib/forager-i18n-context";
 import type { UserProfile } from "@/lib/forager-types";
 
 export default function HomePage() {
   const router = useRouter();
-  const [profile] = useState<UserProfile | null>(() =>
-    typeof window === "undefined" ? null : loadProfileLocal()
-  );
+  const { t } = useT();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !profile) {
+    const p = loadProfileLocal();
+    if (!p) {
       router.replace("/onboarding");
+    } else {
+      setProfile(p);
     }
-  }, [profile, router]);
+    setMounted(true);
+  }, [router]);
 
-  if (!profile) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Loading…
-      </main>
-    );
+  if (!mounted || !profile) {
+    return <main className="min-h-screen" suppressHydrationWarning />;
   }
 
   return (
@@ -35,7 +36,7 @@ export default function HomePage() {
       <AppHeader />
       <div className="max-w-xl mx-auto px-5 pt-2">
         <p className="text-sm text-muted-foreground text-center mb-5">
-          Discover your next food adventure
+          {t("home.tagline")}
         </p>
 
         <SearchPanel profile={profile} />
@@ -44,14 +45,14 @@ export default function HomePage() {
           <ScanEntryCard
             href="/scan/food"
             icon={<Camera size={22} />}
-            title="Snap your meal"
-            description="Identify a dish, estimate macros, log it."
+            title={t("home.snapMeal.title")}
+            description={t("home.snapMeal.desc")}
           />
           <ScanEntryCard
             href="/scan/menu"
             icon={<Languages size={22} />}
-            title="Translate a menu"
-            description="Decode any menu and rank dishes for you."
+            title={t("home.translateMenu.title")}
+            description={t("home.translateMenu.desc")}
           />
         </div>
       </div>

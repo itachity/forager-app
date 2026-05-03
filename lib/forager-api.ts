@@ -9,6 +9,7 @@ import type {
   GeoLocation,
   MenuItem,
   OrderSuggestion,
+  TodayHours,
   TokenUsageSummary,
   ToolTraceEntry,
   UserProfile,
@@ -172,13 +173,34 @@ function normalizeTodayHours(value: unknown): TodayHours | undefined {
   if (!value || typeof value !== "object") return undefined;
   const v = value as Record<string, unknown>;
   const openNow = typeof v.open_now === "boolean" ? v.open_now : undefined;
-  const nextChange = strOrUndefined(v.next_change);
-  const summary = strOrUndefined(v.summary);
-  if (openNow == null && !nextChange && !summary) return undefined;
+  const is24h = typeof v.is_24h === "boolean" ? v.is_24h : false;
+  const isClosedToday =
+    typeof v.is_closed_today === "boolean" ? v.is_closed_today : false;
+  const day = strOrUndefined(v.day) ?? "";
+  const open = strOrUndefined(v.open) ?? null;
+  const close = strOrUndefined(v.close) ?? null;
+  const closesAt = strOrUndefined(v.closes_at) ?? null;
+  const timezone = strOrUndefined(v.timezone) ?? null;
+  if (
+    openNow == null &&
+    !day &&
+    open == null &&
+    close == null &&
+    closesAt == null &&
+    !is24h &&
+    !isClosedToday
+  ) {
+    return undefined;
+  }
   return {
+    day,
+    open,
+    close,
     open_now: openNow ?? false,
-    next_change: nextChange ?? null,
-    summary: summary ?? null,
+    closes_at: closesAt,
+    is_24h: is24h,
+    is_closed_today: isClosedToday,
+    timezone,
   };
 }
 
