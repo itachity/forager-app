@@ -12,16 +12,15 @@ import type { UserProfile } from "@/lib/forager-types";
 
 export default function HomePage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile] = useState<UserProfile | null>(() =>
+    typeof window === "undefined" ? null : loadProfileLocal()
+  );
 
   useEffect(() => {
-    const p = loadProfileLocal();
-    if (!p) {
+    if (typeof window !== "undefined" && !profile) {
       router.replace("/onboarding");
-      return;
     }
-    setProfile(p);
-  }, [router]);
+  }, [profile, router]);
 
   if (!profile) {
     return (

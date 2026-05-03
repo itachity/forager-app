@@ -15,36 +15,32 @@ import { loadProfileLocal } from "@/lib/forager-profile";
 import { DEMO_CHAT } from "@/lib/forager-fallback";
 import type { ChatResponse, UserProfile } from "@/lib/forager-types";
 
+type Loaded = { profile: UserProfile | null; data: ChatResponse | null; demo: boolean };
+
+function readLoaded(): Loaded {
+  if (typeof window === "undefined") return { profile: null, data: null, demo: false };
+  const profile = loadProfileLocal();
+  try {
+    const raw = sessionStorage.getItem("forager:lastChat");
+    if (raw) {
+      const parsed = JSON.parse(raw) as { data: ChatResponse; demo?: boolean };
+      return { profile, data: parsed.data, demo: Boolean(parsed.demo) };
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+  return { profile, data: DEMO_CHAT, demo: true };
+}
+
 export default function ResultsPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [data, setData] = useState<ChatResponse | null>(null);
-  const [demo, setDemo] = useState(false);
+  const [{ profile, data, demo }] = useState<Loaded>(readLoaded);
 
   useEffect(() => {
-    const p = loadProfileLocal();
-    if (!p) {
+    if (typeof window !== "undefined" && !profile) {
       router.replace("/onboarding");
-      return;
     }
-    setProfile(p);
-    try {
-      const raw = sessionStorage.getItem("forager:lastChat");
-      if (raw) {
-        const parsed = JSON.parse(raw) as { data: ChatResponse; demo?: boolean };
-        setData(parsed.data);
-        setDemo(Boolean(parsed.demo));
-      } else {
-        // Direct nav with no session payload — show demo so the UI is meaningful.
-        setData(DEMO_CHAT);
-        setDemo(true);
-      }
-    } catch (e) {
-      console.warn(e);
-      setData(DEMO_CHAT);
-      setDemo(true);
-    }
-  }, [router]);
+  }, [profile, router]);
 
   if (!profile || !data) {
     return (
