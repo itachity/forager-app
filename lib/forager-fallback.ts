@@ -1,0 +1,184 @@
+import type {
+  AnalyzeFoodResponse,
+  AnalyzeMenuResponse,
+  ChatResponse,
+} from "./forager-types";
+
+/* Unsplash hot-link URLs — used for hero, discover cards, and demo data. */
+export const FOOD_IMAGES = {
+  bowl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=900&q=80",
+  pizza: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=900&q=80",
+  noodles: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=900&q=80",
+  poke: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=900&q=80",
+  ramen: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=900&q=80",
+  salad: "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=900&q=80",
+  hero: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=1280&q=80",
+  taco: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=900&q=80",
+  curry: "https://images.unsplash.com/photo-1604152135912-04a022e23696?w=900&q=80",
+  burger: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=900&q=80",
+};
+
+export const DEMO_CHAT: ChatResponse = {
+  answer:
+    "Three high-protein picks within 1 mile of OSU under $15. Top pick has the best macro fit for your goal.",
+  recommendations: [
+    {
+      rank: 1,
+      place: "Local Boys Grindz",
+      address: "150 SW Madison Ave, Corvallis, OR",
+      score: 92,
+      order: "Grilled chicken plate, brown rice, side salad — sub steamed veg for mac.",
+      calories: "720-820 kcal",
+      protein: "55-65 g",
+      carbs: "60-75 g",
+      fat: "18-25 g",
+      confidence: "high",
+      why:
+        "Nails high-protein under 800 kcal. Brown rice + lean grilled chicken delivers steady macros.",
+      tradeoffs: "Skip the gravy; mac side adds ~250 kcal.",
+      sources_used: ["google_places", "usda_fooddata_central"],
+      google_maps_url: "https://maps.google.com/?q=Local+Boys+Grindz+Corvallis",
+    },
+    {
+      rank: 2,
+      place: "Pho Van",
+      address: "215 SW 2nd St, Corvallis, OR",
+      score: 86,
+      order: "Pho ga (chicken pho), light noodles, extra bean sprouts.",
+      calories: "560-680 kcal",
+      protein: "35-45 g",
+      carbs: "70-80 g",
+      fat: "8-14 g",
+      confidence: "medium",
+      why: "Lean broth + chicken. Easy to keep calories down by halving the noodles.",
+      tradeoffs: "Sodium is high; skip the hoisin if you're sensitive.",
+      sources_used: ["google_places", "usda_fooddata_central"],
+      google_maps_url: "https://maps.google.com/?q=Pho+Van+Corvallis",
+    },
+    {
+      rank: 3,
+      place: "Block 15 Restaurant",
+      address: "300 SW Jefferson Ave, Corvallis, OR",
+      score: 78,
+      order: "Steelhead trout, roasted seasonal veg, no sauce on the side.",
+      calories: "640-740 kcal",
+      protein: "40-50 g",
+      carbs: "30-45 g",
+      fat: "22-30 g",
+      confidence: "medium",
+      why: "Wild-caught fish + veg keeps protein high without heavy carbs.",
+      tradeoffs: "Pricier than the others; portion size varies by season.",
+      sources_used: ["google_places"],
+      google_maps_url: "https://maps.google.com/?q=Block+15+Restaurant+Corvallis",
+    },
+  ],
+  tool_trace: [
+    { tool: "nvidia_nemotron_intent_extraction", status: "skipped", reason: "demo mode" },
+    { tool: "google_places_restaurant_search", status: "ok", count: 12, radius_meters: 1600 },
+    {
+      tool: "forager_weighted_ranking",
+      status: "ok",
+      weights: {
+        restaurant_rating: 0.15,
+        community_sentiment: 0.05,
+        distance: 0.2,
+        price: 0.15,
+        macro_fit: 0.25,
+        preference_match: 0.15,
+        availability: 0.05,
+      },
+    },
+    { tool: "usda_fooddata_central", status: "ok", queries: ["grilled chicken", "pho ga", "steelhead trout"] },
+  ],
+  limitations: ["Demo data — backend offline."],
+};
+
+export const DEMO_FOOD_ANALYSIS: AnalyzeFoodResponse = {
+  dish: "Grilled Chicken Bowl with Quinoa",
+  confidence: 0.78,
+  cuisine: "California / Mediterranean fusion",
+  ingredients: [
+    "grilled chicken breast",
+    "quinoa",
+    "kale",
+    "roasted sweet potato",
+    "chickpeas",
+    "tahini drizzle",
+    "lemon",
+  ],
+  followUpQuestions: [
+    {
+      id: "portion",
+      question: "How big was the bowl?",
+      options: ["Small", "Medium", "Large"],
+    },
+    {
+      id: "finished",
+      question: "How much did you finish?",
+      options: ["A few bites", "About half", "All of it"],
+    },
+  ],
+  macros: {
+    caloriesMin: 540,
+    caloriesMax: 720,
+    proteinMinG: 38,
+    proteinMaxG: 48,
+    carbsMinG: 50,
+    carbsMaxG: 65,
+    fatMinG: 14,
+    fatMaxG: 22,
+    servingNote: "Estimate assumes a medium bowl, finished entirely.",
+  },
+  logSuggestions: [
+    "Log as 'Grilled chicken grain bowl, ~630 kcal' in your tracker.",
+    "If your tracker has 'Sweetgreen Harvest Bowl', that's a close match.",
+  ],
+  nextOrderTips: [
+    "Skip the tahini drizzle to save ~120 kcal.",
+    "Sub greens for half the quinoa to drop ~80 carb cals.",
+  ],
+};
+
+export const DEMO_MENU_ANALYSIS: AnalyzeMenuResponse = {
+  detectedLanguage: "Japanese",
+  cuisine: "Izakaya",
+  overallCulturalNorms: [
+    "Tipping is not expected and may be politely refused.",
+    "It's polite to pour drinks for others rather than yourself.",
+    "Ordering several small plates to share is the norm.",
+  ],
+  rankedItems: [
+    {
+      originalName: "焼き鳥 もも",
+      translatedName: "Grilled chicken thigh skewers (yakitori momo)",
+      description: "Skewered, charcoal-grilled chicken thigh, seasoned simply with salt or tare.",
+      matchScore: 9.1,
+      whyRanked: "High protein, no shellfish, no peanuts — fits your high-protein goal.",
+      culturalNote: "Salt (shio) is leaner than tare (sweet soy glaze).",
+      phraseToOrder: "Yakitori momo o futatsu, shio de kudasai.",
+      ingredients: ["chicken thigh", "salt", "soy", "mirin"],
+    },
+    {
+      originalName: "豆腐サラダ",
+      translatedName: "Tofu salad",
+      description: "Cold silken tofu over greens with a sesame-soy dressing.",
+      matchScore: 7.8,
+      whyRanked: "Lean and plant-based; sesame dressing adds healthy fat.",
+      culturalNote: "Often shared as a starter.",
+      phraseToOrder: "Tōfu sarada o hitotsu kudasai.",
+      ingredients: ["tofu", "greens", "sesame", "soy"],
+    },
+    {
+      originalName: "サーモン刺身",
+      translatedName: "Salmon sashimi",
+      description: "Slices of fresh raw salmon, 5-6 pieces.",
+      matchScore: 7.5,
+      whyRanked: "Excellent omega-3, low carb. Pairs well with miso soup.",
+      culturalNote: "Light wasabi is traditional — soy sauce is dipped sparingly.",
+      phraseToOrder: "Sāmon sashimi o kudasai.",
+      ingredients: ["salmon"],
+    },
+  ],
+  prose:
+    "Stick to grilled or steamed items with shio (salt) seasoning. Avoid tempura and panko-fried dishes if cutting calories.",
+};
