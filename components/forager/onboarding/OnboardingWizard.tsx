@@ -12,7 +12,7 @@ import {
   persistProfile,
 } from "@/lib/forager-profile";
 import { getAuthUser, loadProfile as loadProfileRemote } from "@/lib/forager-supabase";
-import type { ProfileMode, UserProfile } from "@/lib/forager-types";
+import type { UserProfile } from "@/lib/forager-types";
 import { Step2Language } from "./Step2Language";
 import { Step3Diet } from "./Step3Diet";
 import { Step4Allergy } from "./Step4Allergy";
@@ -29,15 +29,12 @@ export function OnboardingWizard() {
   const toast = useToast();
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
   const [stepIndex, setStepIndex] = useState(0); // 0..6
-  const [baseMode, setBaseMode] = useState<Exclude<ProfileMode, "cheat_day">>("normal");
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const local = loadProfileLocal();
-      const initialBase: Exclude<ProfileMode, "cheat_day"> =
-        local?.profileMode === "guest" ? "guest" : "normal";
       const user = await getAuthUser();
       let next: UserProfile = local ?? defaultProfile();
       if (user && local?.profileMode !== "guest") {
@@ -53,7 +50,6 @@ export function OnboardingWizard() {
       }
       if (cancelled) return;
       setProfile(next);
-      setBaseMode(initialBase);
       setHydrated(true);
     })();
     return () => {
@@ -73,10 +69,6 @@ export function OnboardingWizard() {
     });
   };
 
-  const cheatDay = profile.profileMode === "cheat_day";
-  const setCheatDay = (v: boolean) => {
-    update({ profileMode: v ? "cheat_day" : baseMode });
-  };
 
   const displayStep = stepIndex + FIRST_INTERNAL; // 2..8
   const isLast = stepIndex === 6;
@@ -107,13 +99,11 @@ export function OnboardingWizard() {
       case 2: return <Step4Allergy {...props} />;
       case 3: return <Step5Nutrition {...props} />;
       case 4: return <Step6Preferences {...props} />;
-      case 5: return <Step7Privacy {...props} cheatDay={cheatDay} onCheatDay={setCheatDay} />;
+      case 5: return <Step7Privacy {...props} />;
       case 6: return <Step8Summary {...props} />;
       default: return null;
     }
-    // We intentionally re-render on every profile change; no extra deps needed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stepIndex, profile, cheatDay]);
+  }, [stepIndex, profile]);
 
   if (!hydrated) {
     return (

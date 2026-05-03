@@ -17,7 +17,7 @@ export default function WelcomePage() {
 
   const onGoogle = async () => {
     if (!supabaseAvailable) {
-      toast.show("Sign-in not configured for this build — continue as guest.", "default");
+      toast.show("Google sign-in isn't configured yet. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.", "error");
       return;
     }
     setBusy(true);
@@ -35,7 +35,7 @@ export default function WelcomePage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="min-h-screen flex flex-col bg-[radial-gradient(circle_at_top,#fff7ef,transparent_50%),linear-gradient(#fcfcfa,#f6f5f1)]">
       <div className="px-6 pt-10 max-w-xl mx-auto w-full flex-1 flex flex-col">
         <div className="flex justify-center mb-8">
           <ForagerLogo size="lg" />
@@ -52,7 +52,7 @@ export default function WelcomePage() {
           />
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-center leading-tight">
+        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-center leading-tight">
           Discover your next food adventure.
         </h1>
         <p className="mt-3 text-muted-foreground leading-relaxed text-center">
