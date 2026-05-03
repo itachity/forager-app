@@ -1,65 +1,106 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, User as UserIcon } from "lucide-react";
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { ForagerLogo } from "@/components/forager/ForagerLogo";
+import { useToast } from "@/components/forager/ToastProvider";
+import { signInWithGoogle, supabaseAvailable } from "@/lib/forager-supabase";
+import { defaultProfile, persistProfile } from "@/lib/forager-profile";
+import { FOOD_IMAGES } from "@/lib/forager-fallback";
+
+export default function WelcomePage() {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+
+  const onGoogle = async () => {
+    if (!supabaseAvailable) {
+      toast.show("Sign-in not configured for this build — continue as guest.", "default");
+      return;
+    }
+    setBusy(true);
+    const res = await signInWithGoogle("/onboarding");
+    if (!res.ok) {
+      toast.show(res.reason ?? "Sign-in failed", "error");
+      setBusy(false);
+    }
+  };
+
+  const onGuest = async () => {
+    const guest = { ...defaultProfile(), profileMode: "guest" as const };
+    await persistProfile(guest);
+    router.push("/onboarding");
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen flex flex-col">
+      <div className="relative h-[44vh] md:h-[52vh] w-full overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={FOOD_IMAGES.hero}
+          alt="A warm table of colorful, fresh dishes"
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
+        <div className="absolute top-5 left-5">
+          <ForagerLogo size="md" />
+        </div>
+        <div className="absolute bottom-6 right-5 max-w-[16rem] rounded-2xl bg-card/95 backdrop-blur p-3 shadow-lg border border-border/60">
+          <div className="text-[10px] uppercase tracking-wider text-accent font-semibold">
+            Today&rsquo;s pick
+          </div>
+          <div className="text-sm font-semibold mt-0.5">Green Harvest Bowl</div>
+          <div className="text-xs text-muted-foreground">0.3 mi · Local Boys Grindz</div>
+        </div>
+      </div>
+
+      <div className="px-6 -mt-6 relative z-10 max-w-xl mx-auto w-full">
+        <div className="flex items-start gap-3 mb-2">
+          <Image
+            src="/icon.png"
+            alt="Forager app icon"
+            width={56}
+            height={56}
+            className="rounded-2xl shadow-md shrink-0"
+          />
+          <h1 className="text-3xl font-semibold tracking-tight leading-tight">
+            Discover your next food adventure.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <p className="mt-3 text-muted-foreground leading-relaxed">
+          Hidden food gems tailored to your taste, goals, and mood — from cozy late-night
+          bites to your next high-protein bowl.
+        </p>
+
+        <div className="mt-7 space-y-3">
+          <Button
+            variant="cta"
+            size="xl"
+            className="w-full"
+            onClick={onGoogle}
+            disabled={busy}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            Continue with Google <ArrowRight />
+          </Button>
+          <Button
+            variant="outline"
+            size="xl"
+            className="w-full rounded-2xl"
+            onClick={onGuest}
+            disabled={busy}
           >
-            Documentation
-          </a>
+            <UserIcon /> Continue as guest
+          </Button>
         </div>
-      </main>
-    </div>
+
+        <p className="mt-6 mb-10 text-center text-xs text-muted-foreground">
+          By continuing you agree to our Terms &amp; Privacy.
+        </p>
+      </div>
+    </main>
   );
 }
