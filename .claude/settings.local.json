@@ -21,7 +21,10 @@
       "Bash(curl -s http://localhost:3000/discover)",
       "Bash(curl -s http://localhost:3000/scan/food)",
       "Bash(git push *)",
-      "Bash(gh pr create --base main --head mj-dev --title 'Bootstrap Forager UI: welcome, 8-step onboarding, search, results, discover, food/menu scan flows' --body ' *)"
+      "Bash(gh pr create --base main --head mj-dev --title 'Bootstrap Forager UI: welcome, 8-step onboarding, search, results, discover, food/menu scan flows' --body ' *)",
+      "Bash(git stash *)",
+      "Bash(python -c \"from agent import ForagerAgent; from tools.restaurants import enrich_top_candidates, fetch_place_details, compute_today_hours; print\\('imports ok'\\)\")",
+      "Bash(python -c ' *)"
     ]
   }
 }
