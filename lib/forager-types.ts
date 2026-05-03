@@ -85,12 +85,56 @@ export type ChatRequest = {
 
 export type Confidence = "high" | "medium" | "medium-low" | "low";
 
+export type TokenUsageCall = {
+  provider: "nvidia" | string;
+  model: string;
+  route: string;
+  purpose: string;
+  retry?: boolean;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: unknown;
+  completion_tokens_details?: unknown;
+};
+
+export type TokenUsageSummary = {
+  provider: "nvidia" | string;
+  model: string;
+  calls: TokenUsageCall[];
+  totals: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    call_count: number;
+  };
+};
+
+export type OrderSuggestion = {
+  name: string;
+  modifications: string[];
+  estimated_macros: {
+    calories: string;
+    protein: string;
+    carbs: string;
+    fat: string;
+    confidence: Confidence;
+  };
+  why: string;
+};
+
 export type ChatRecommendation = {
   rank: number;
   place: string;
   address: string;
   score: number;
-  order: string;
+
+  /** Backward-compatible single order shown by older UI cards. */
+  order?: string;
+
+  /** New preferred shape: at least 3 order ideas per restaurant. */
+  order_suggestions?: OrderSuggestion[];
+
   calories?: string;
   protein?: string;
   carbs?: string;
@@ -100,11 +144,14 @@ export type ChatRecommendation = {
   tradeoffs?: string;
   sources_used: string[];
   google_maps_url?: string;
+
   /** Display label like "$" / "$$" / "$$$" — populated when backend
    * surfaces Google Places `priceLevel`. */
   price?: string;
+
   /** Estimated meal price in USD when known. */
   price_usd?: number;
+
   /** Short user-review quotes pulled from Google Places (max ~2). Optional. */
   review_quotes?: string[];
 };
@@ -113,10 +160,10 @@ export type ToolTraceEntry = {
   tool: string;
   status: "ok" | "error" | "skipped" | string;
   count?: number;
-  reason?: string;
+  reason?: string | null;
   error?: string;
   output?: unknown;
-  weights?: Record<string, number>;
+  weights?: Record<string, number | string>;
   queries?: string[];
   radius_meters?: number;
 };
@@ -126,6 +173,7 @@ export type ChatResponse = {
   recommendations: ChatRecommendation[];
   tool_trace?: ToolTraceEntry[];
   limitations?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type FollowUpQuestion = {
@@ -147,14 +195,23 @@ export type FoodMacros = {
 };
 
 export type AnalyzeFoodResponse = {
+  status?: "ok" | "error" | string;
+  filename?: string;
   dish: string;
   confidence: number; // 0..1
-  cuisine?: string;
+  cuisine?: string | null;
+  detectedLanguage?: string | null;
+  recordText?: string | null;
+  record_text?: string;
   ingredients: string[];
   followUpQuestions: FollowUpQuestion[];
   macros: FoodMacros;
   logSuggestions: string[];
   nextOrderTips: string[];
+  structured_identification?: unknown;
+  usda_references?: unknown[];
+  tools_used?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type MenuItem = {
@@ -172,11 +229,19 @@ export type MenuItem = {
 };
 
 export type AnalyzeMenuResponse = {
+  status?: "ok" | "error" | string;
   detectedLanguage: string;
   cuisine: string;
   overallCulturalNorms: string[];
   rankedItems: MenuItem[];
   prose?: string;
+  record_text?: string;
+  profile_context?: unknown;
+  menu_description?: string;
+  structured_analysis?: unknown;
+  usda_references?: unknown[];
+  tools_used?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type ApiResult<T> =
