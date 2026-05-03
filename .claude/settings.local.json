@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm ls *)",
+      "Bash(npm view *)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'chore\\(theme\\): port forager design tokens, button variants, layout metadata *)",
+      "Bash(git commit -m 'feat\\(lib\\): types, supabase, profile, mappings, fallback, phrases, image, api adapters *)",
+      "Bash(git commit -m 'feat\\(components\\): atoms \\(logo, pill, badges, toast\\) + shell \\(headers, bottom nav\\) *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(git commit -m 'feat\\(welcome,onboarding\\): welcome screen + 7-screen wizard \\(steps 2-8\\) *)",
+      "Bash(git commit -m 'feat\\(home,results,discover\\): search panel, ranked recs + faux map, discover grid *)",
+      "Bash(git commit -m 'feat\\(scan,chat\\): scan capture + result pages for food and menu, /chat redirect *)",
+      "Bash(tee /tmp/forager-dev.log)",
+      "Bash(curl -sI http://localhost:3000/ -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:3000/)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(curl -s http://localhost:3000/chat)",
+      "Bash(curl -s http://localhost:3000/discover)",
+      "Bash(curl -s http://localhost:3000/scan/food)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head mj-dev --title 'Bootstrap Forager UI: welcome, 8-step onboarding, search, results, discover, food/menu scan flows' --body ' *)"
+    ]
+  }
+}
