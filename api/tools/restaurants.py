@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import math
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
 from dotenv import load_dotenv
 
 from cache import disk_cache
+
+
+PRICE_LEVEL_LABELS = {
+    "PRICE_LEVEL_FREE": "Free",
+    "PRICE_LEVEL_INEXPENSIVE": "$",
+    "PRICE_LEVEL_MODERATE": "$$",
+    "PRICE_LEVEL_EXPENSIVE": "$$$",
+    "PRICE_LEVEL_VERY_EXPENSIVE": "$$$$",
+}
 
 
 load_dotenv()
@@ -495,6 +506,7 @@ def normalize_place(
         distance_miles = haversine_miles(lat, lng, place_lat, place_lng)
 
     current_opening_hours = raw_place.get("currentOpeningHours") or {}
+    price_level = raw_place.get("priceLevel")
 
     return {
         "id": raw_place.get("id"),
@@ -502,13 +514,22 @@ def normalize_place(
         "address": raw_place.get("formattedAddress"),
         "rating": raw_place.get("rating"),
         "reviewCount": raw_place.get("userRatingCount"),
-        "priceLevel": raw_place.get("priceLevel"),
+        "priceLevel": price_level,
+        "priceLevelLabel": PRICE_LEVEL_LABELS.get(price_level) if price_level else None,
         "openNow": current_opening_hours.get("openNow"),
         "businessStatus": raw_place.get("businessStatus"),
         "googleMapsUri": raw_place.get("googleMapsUri"),
         "primaryType": raw_place.get("primaryType"),
         "types": raw_place.get("types", []),
-        "reviewQuotes": extract_review_quotes(raw_place, intent=intent),
+        # Filled in by enrich_top_candidates() for the top N only.
+        "reviewQuotes": [],
+        "websiteUri": None,
+        "editorialSummary": None,
+        "openingHoursToday": None,
+        "regularOpeningHours": None,
+        "utcOffsetMinutes": None,
+        "latitude": place_lat,
+        "longitude": place_lng,
         "distanceMiles": round(distance_miles, 2) if distance_miles is not None else None,
         "raw": raw_place,
     }
@@ -531,6 +552,8 @@ def search_google_restaurants(
     max_results = max(1, min(max_results, 20))
 
     url = "https://places.googleapis.com/v1/places:searchText"
+    # Phase 1: cheap field mask. Reviews, regularOpeningHours, websiteUri, etc.
+    # are pulled later for the top N candidates only via fetch_place_details().
     headers = {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": api_key,
@@ -546,8 +569,7 @@ def search_google_restaurants(
             "places.businessStatus,"
             "places.currentOpeningHours,"
             "places.primaryType,"
-            "places.types,"
-            "places.reviews"
+            "places.types"
         ),
     }
 
@@ -646,3 +668,231 @@ def score_existing_restaurants(
 
     scored_places.sort(key=lambda item: item["score"]["total"], reverse=True)
     return scored_places
+
+
+# ----------------------- Phase 2: Place Details enrichment -----------------------
+
+PLACE_DETAILS_FIELD_MASK = (
+    "id,reviews,regularOpeningHours,currentOpeningHours,"
+    "websiteUri,editorialSummary,location,priceLevel,utcOffsetMinutes"
+)
+
+
+@disk_cache(ttl_seconds=60 * 60 * 24)
+def fetch_place_details(place_id: str) -> dict[str, Any]:
+    """Pull rich detail fields for a single Google place. Cached 24h per id."""
+    if not place_id:
+        return {}
+
+    api_key = _require_google_key()
+    url = f"https://places.googleapis.com/v1/places/{place_id}"
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": PLACE_DETAILS_FIELD_MASK,
+    }
+
+    with httpx.Client(timeout=20.0) as client:
+        response = client.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json() or {}
+
+
+_WEEKDAY_NAMES = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
+
+
+def _format_minutes(hour: int | None, minute: int | None) -> str | None:
+    if hour is None:
+        return None
+    minute = minute or 0
+    suffix = "AM" if hour < 12 else "PM"
+    display_hour = hour % 12 or 12
+    if minute == 0:
+        return f"{display_hour}:00 {suffix}"
+    return f"{display_hour}:{minute:02d} {suffix}"
+
+
+def compute_today_hours(
+    regular_opening_hours: dict[str, Any] | None,
+    utc_offset_minutes: int | None,
+) -> dict[str, Any] | None:
+    """
+    Build a small dict describing today's opening hours in the restaurant's
+    local time. Handles 24h, closed-today, after-midnight close, missing data.
+    """
+    if not regular_opening_hours:
+        return None
+
+    if utc_offset_minutes is None:
+        local_tz = timezone.utc
+    else:
+        local_tz = timezone(timedelta(minutes=int(utc_offset_minutes)))
+
+    now_local = datetime.now(local_tz)
+    today_index = now_local.weekday()  # Monday=0
+    today_name = _WEEKDAY_NAMES[today_index]
+    timezone_label = (
+        f"UTC{int(utc_offset_minutes) // 60:+d}"
+        if utc_offset_minutes is not None
+        else None
+    )
+
+    base = {
+        "day": today_name,
+        "open": None,
+        "close": None,
+        "open_now": False,
+        "closes_at": None,
+        "is_24h": False,
+        "is_closed_today": False,
+        "timezone": timezone_label,
+    }
+
+    periods = regular_opening_hours.get("periods") or []
+
+    # Google Places "periods" use day numbers 0=Sunday..6=Saturday.
+    # Convert our Monday-based index into Google's Sunday-based index.
+    google_today = (today_index + 1) % 7
+
+    todays_periods = []
+    for period in periods:
+        open_info = period.get("open") or {}
+        close_info = period.get("close") or {}
+        if open_info.get("day") == google_today:
+            todays_periods.append((open_info, close_info))
+
+    if not todays_periods:
+        # If Google sent only weekdayDescriptions, fall back to that string.
+        descriptions = regular_opening_hours.get("weekdayDescriptions") or []
+        for desc in descriptions:
+            if desc.lower().startswith(today_name.lower()):
+                base["open"] = desc
+                base["is_closed_today"] = "closed" in desc.lower()
+                return base
+        base["is_closed_today"] = True
+        return base
+
+    # 24h heuristic: a single period with no close info or matching day/open == 0.
+    if len(todays_periods) == 1:
+        open_info, close_info = todays_periods[0]
+        if not close_info and open_info.get("hour", 0) == 0:
+            base["is_24h"] = True
+            base["open_now"] = True
+            return base
+
+    # Pick the period that bounds "now" if any, else the next upcoming one.
+    chosen = None
+    for open_info, close_info in todays_periods:
+        open_hour = open_info.get("hour", 0)
+        open_min = open_info.get("minute", 0)
+        open_dt = now_local.replace(hour=open_hour, minute=open_min, second=0, microsecond=0)
+
+        close_hour = close_info.get("hour")
+        close_min = close_info.get("minute", 0)
+        if close_hour is None:
+            close_dt = open_dt + timedelta(hours=12)
+        else:
+            close_dt = now_local.replace(hour=close_hour, minute=close_min, second=0, microsecond=0)
+            if close_info.get("day") != google_today or close_dt <= open_dt:
+                close_dt += timedelta(days=1)
+
+        if open_dt <= now_local <= close_dt:
+            chosen = (open_dt, close_dt)
+            break
+        if not chosen and open_dt > now_local:
+            chosen = (open_dt, close_dt)
+
+    if chosen is None:
+        first_open, first_close = todays_periods[0]
+        base["open"] = _format_minutes(first_open.get("hour"), first_open.get("minute"))
+        base["close"] = _format_minutes(first_close.get("hour"), first_close.get("minute"))
+        return base
+
+    open_dt, close_dt = chosen
+    base["open"] = _format_minutes(open_dt.hour, open_dt.minute)
+    base["close"] = _format_minutes(close_dt.hour, close_dt.minute)
+    base["closes_at"] = base["close"]
+    base["open_now"] = open_dt <= now_local <= close_dt
+    return base
+
+
+async def _fetch_one_detail(place_id: str) -> tuple[str, dict[str, Any]]:
+    if not place_id:
+        return place_id, {}
+    try:
+        data = await asyncio.to_thread(fetch_place_details, place_id)
+    except Exception:
+        data = {}
+    return place_id, data
+
+
+async def enrich_top_candidates(
+    places: list[dict[str, Any]],
+    top_n: int = 6,
+    intent: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Pull Place Details (reviews, hours, website, etc.) for the top N candidates
+    in parallel and merge into their normalized dicts. Reviews are extracted
+    here so the regex pass runs only on the survivors.
+    """
+    if not places:
+        return places
+
+    head = places[:top_n]
+    tail = places[top_n:]
+
+    detail_results = await asyncio.gather(
+        *[_fetch_one_detail(p.get("id") or "") for p in head]
+    )
+    details_by_id = {pid: detail for pid, detail in detail_results}
+
+    enriched_head: list[dict[str, Any]] = []
+    for place in head:
+        pid = place.get("id") or ""
+        detail = details_by_id.get(pid) or {}
+
+        if detail:
+            location = detail.get("location") or {}
+            current_hours = detail.get("currentOpeningHours") or {}
+            regular_hours = detail.get("regularOpeningHours")
+            utc_offset = detail.get("utcOffsetMinutes")
+            editorial = detail.get("editorialSummary") or {}
+            new_price_level = detail.get("priceLevel")
+
+            place["websiteUri"] = detail.get("websiteUri")
+            place["editorialSummary"] = (
+                editorial.get("text") if isinstance(editorial, dict) else editorial
+            )
+            place["regularOpeningHours"] = regular_hours
+            place["utcOffsetMinutes"] = utc_offset
+            place["openingHoursToday"] = compute_today_hours(regular_hours, utc_offset)
+
+            # Detail call returns more authoritative openNow / location / priceLevel.
+            if current_hours.get("openNow") is not None:
+                place["openNow"] = current_hours.get("openNow")
+            if location.get("latitude") is not None:
+                place["latitude"] = location.get("latitude")
+            if location.get("longitude") is not None:
+                place["longitude"] = location.get("longitude")
+            if new_price_level and not place.get("priceLevel"):
+                place["priceLevel"] = new_price_level
+                place["priceLevelLabel"] = PRICE_LEVEL_LABELS.get(new_price_level)
+
+            # Keep raw payload so review-quote extraction (which reads `reviews`)
+            # works the same as before.
+            merged_raw = dict(place.get("raw") or {})
+            merged_raw["reviews"] = detail.get("reviews") or []
+            place["raw"] = merged_raw
+            place["reviewQuotes"] = extract_review_quotes(merged_raw, intent=intent)
+
+        enriched_head.append(place)
+
+    return enriched_head + tail

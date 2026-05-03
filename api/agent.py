@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import re
+import time
 from typing import Any
 
 from dotenv import load_dotenv
@@ -10,7 +11,7 @@ from openai import OpenAI
 
 from tools.macros import get_macro_references
 from tools.menus import analyze_menu_image_bytes
-from tools.restaurants import search_and_score_restaurants
+from tools.restaurants import enrich_top_candidates, search_and_score_restaurants
 
 
 load_dotenv()
@@ -400,11 +401,13 @@ class ForagerAgent:
                 page_size=2,
             )
 
+        stage_started = time.perf_counter()
         restaurant_result, macro_result = await asyncio.gather(
             fetch_restaurants(),
             fetch_macro_references(),
             return_exceptions=True,
         )
+        text_search_seconds = round(time.perf_counter() - stage_started, 3)
 
         restaurants: list[dict[str, Any]] = []
         macro_references: list[dict[str, Any]] = []
@@ -433,6 +436,7 @@ class ForagerAgent:
                     "status": "ok",
                     "count": len(restaurants),
                     "radius_meters": radius_meters,
+                    "seconds": text_search_seconds,
                 }
             )
 
@@ -470,6 +474,39 @@ class ForagerAgent:
                 }
             )
 
+        if restaurants:
+            enrich_started = time.perf_counter()
+            try:
+                enriched = await enrich_top_candidates(
+                    places=restaurants,
+                    top_n=6,
+                    intent=intent,
+                )
+            except Exception as exc:
+                enriched = restaurants
+                tool_trace.append(
+                    {
+                        "tool": "google_place_details_enrichment",
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+            else:
+                enrich_seconds = round(time.perf_counter() - enrich_started, 3)
+                head = enriched[:6]
+                tool_trace.append(
+                    {
+                        "tool": "google_place_details_enrichment",
+                        "status": "ok",
+                        "count": len(head),
+                        "with_hours": sum(1 for p in head if p.get("openingHoursToday")),
+                        "with_website": sum(1 for p in head if p.get("websiteUri")),
+                        "seconds": enrich_seconds,
+                    }
+                )
+                restaurants = enriched
+
+        synth_started = time.perf_counter()
         final = self.synthesize_final_answer(
             message=message,
             user_profile=user_profile,
@@ -481,6 +518,13 @@ class ForagerAgent:
             macro_references=macro_references,
             tool_trace=tool_trace,
             token_usage=token_usage,
+        )
+        tool_trace.append(
+            {
+                "tool": "nemotron_final_synthesis",
+                "status": "ok",
+                "seconds": round(time.perf_counter() - synth_started, 3),
+            }
         )
 
         summary = summarize_token_usage(token_usage)
@@ -788,9 +832,13 @@ class ForagerAgent:
                 "rating": r.get("rating"),
                 "reviewCount": r.get("reviewCount"),
                 "priceLevel": r.get("priceLevel"),
+                "priceLevelLabel": r.get("priceLevelLabel"),
                 "openNow": r.get("openNow"),
                 "distanceMiles": r.get("distanceMiles"),
                 "googleMapsUri": r.get("googleMapsUri"),
+                "websiteUri": r.get("websiteUri"),
+                "editorialSummary": r.get("editorialSummary"),
+                "openingHoursToday": r.get("openingHoursToday"),
                 "primaryType": r.get("primaryType"),
                 "types": r.get("types", []),
                 "reviewQuotes": r.get("reviewQuotes", []),
@@ -817,6 +865,33 @@ class ForagerAgent:
                     "9. Review quotes only support restaurant vibe/quality, not macro accuracy.\n"
                     "10. sources_used must list real sources such as Google Places, USDA FoodData Central, Nemotron, and Forager scoring.\n"
                     "11. Respect profile_mode and use_profile from recommendation_context.\n\n"
+                    "GROUNDING RULES (HARD REQUIREMENTS):\n"
+                    "G1. Every recommendation's `why` MUST cite at least one of the following: a specific user-profile field "
+                    "(`dietary.allergens`, `dietary.avoidIngredients`, `dietary.dietRules.*`, `dietary.spiceTolerance`, "
+                    "`nutritionGoals.goalType`, `nutritionGoals.proteinMinGrams`, `nutritionGoals.caloriesMax`, "
+                    "`preferences.budget`, `preferences.likedCuisines`, `preferences.likedFoods`, "
+                    "`preferences.preferredOrderTerms`, `preferences.maxDistanceMiles`) OR a verbatim phrase from the user's "
+                    "original message. Generic restaurant blurb without a profile/prompt anchor is NOT acceptable.\n"
+                    "G2. Every recommendation's `tradeoffs` MUST acknowledge a specific profile constraint or prompt phrase "
+                    "this restaurant only partially satisfies (e.g. budget mismatch, missing dietRule, lower protein than goal, "
+                    "farther than maxDistanceMiles). Do not write generic 'higher price point' tradeoffs unless price actually "
+                    "conflicts with the user's `preferences.budget`.\n"
+                    "G3. For each recommendation include an `evidence` object listing which profile fields and which prompt "
+                    "phrases you cited. Use the exact dotted profile-field names from the list above. Quote prompt phrases "
+                    "verbatim and case-sensitively as they appear in the user's original message.\n\n"
+                    "PRICE-RANGE RULES:\n"
+                    "P1. Every order_suggestion MUST include `price_range_usd: {min, max}` and `price_confidence` "
+                    "(high|medium|low). Anchor the range on the restaurant's `priceLevel` / `priceLevelLabel`, the cuisine, "
+                    "and the city in `address`. Always return a range, never a single point — widen the range and lower "
+                    "confidence when uncertain. If `priceLevel` is missing, use `low` confidence.\n\n"
+                    "EXAMPLE (illustrative, not literal):\n"
+                    'User message: "something high protein near me, ideally cheap"\n'
+                    'profile.nutritionGoals.goalType = "high_protein", profile.preferences.budget = "cheap".\n'
+                    "A grounded `why`: \"Matches your high_protein goal (35-40g per bowl) and your 'cheap' budget — "
+                    "Google priceLevel here is INEXPENSIVE, and you said 'near me' so 0.4 mi is well inside your maxDistance.\"\n"
+                    "A grounded `tradeoffs`: \"Limited vegetarian options if your dietRules later change; otherwise no profile conflicts.\"\n"
+                    'evidence: {"profile_fields_cited": ["nutritionGoals.goalType","preferences.budget","preferences.maxDistanceMiles"], '
+                    '"prompt_phrases_cited": ["high protein","cheap","near me"]}\n\n'
                     "Return JSON only. No markdown.\n\n"
                     "Schema:\n"
                     "{\n"
@@ -840,10 +915,16 @@ class ForagerAgent:
                     '            "fat": "string",\n'
                     '            "confidence": "high|medium|medium-low|low"\n'
                     "          },\n"
+                    '          "price_range_usd": { "min": 0, "max": 0 },\n'
+                    '          "price_confidence": "high|medium|low",\n'
                     '          "why": "string"\n'
                     "        }\n"
                     "      ],\n"
                     '      "tradeoffs": "string",\n'
+                    '      "evidence": {\n'
+                    '        "profile_fields_cited": ["string"],\n'
+                    '        "prompt_phrases_cited": ["string"]\n'
+                    "      },\n"
                     '      "sources_used": ["string"],\n'
                     '      "google_maps_url": "string or null"\n'
                     "    }\n"
@@ -882,6 +963,21 @@ class ForagerAgent:
                 token_usage=token_usage,
             )
             parsed = self.extract_json_from_text(text)
+
+            unjustified_ranks = self.find_unjustified_recommendations(
+                parsed=parsed,
+                user_profile=user_profile,
+                message=message,
+            )
+            if unjustified_ranks:
+                parsed = self.retry_synthesis_for_unjustified(
+                    parsed=parsed,
+                    unjustified_ranks=unjustified_ranks,
+                    base_messages=messages,
+                    token_usage=token_usage,
+                    tool_trace=tool_trace,
+                )
+
             parsed["tool_trace"] = tool_trace
             return self.normalize_chat_response(parsed, restaurants, intent)
         except Exception as exc:
@@ -893,6 +989,206 @@ class ForagerAgent:
             )
             fallback["limitations"].append(f"Nemotron synthesis failed: {exc}")
             return fallback
+
+    # ----------------------- evidence validator + retry -----------------------
+
+    _ALLOWED_EVIDENCE_FIELDS = {
+        "dietary.allergens",
+        "dietary.avoidIngredients",
+        "dietary.dietRules.halal",
+        "dietary.dietRules.kosher",
+        "dietary.dietRules.vegetarian",
+        "dietary.dietRules.vegan",
+        "dietary.dietRules.pescatarian",
+        "dietary.dietRules.glutenFree",
+        "dietary.dietRules.dairyFree",
+        "dietary.dietRules.nutFree",
+        "dietary.spiceTolerance",
+        "nutritionGoals.goalType",
+        "nutritionGoals.proteinMinGrams",
+        "nutritionGoals.caloriesMax",
+        "nutritionGoals.caloriesMin",
+        "nutritionGoals.carbsMaxGrams",
+        "nutritionGoals.fatMaxGrams",
+        "preferences.budget",
+        "preferences.likedCuisines",
+        "preferences.likedFoods",
+        "preferences.dislikedCuisines",
+        "preferences.dislikedFoods",
+        "preferences.preferredOrderTerms",
+        "preferences.avoidOrderTerms",
+        "preferences.maxDistanceMiles",
+    }
+
+    def _profile_field_value(self, user_profile: dict[str, Any], path: str) -> Any:
+        cursor: Any = user_profile
+        for part in path.split("."):
+            if not isinstance(cursor, dict):
+                return None
+            cursor = cursor.get(part)
+        return cursor
+
+    def _evidence_is_valid(
+        self,
+        rec: dict[str, Any],
+        user_profile: dict[str, Any],
+        message: str,
+    ) -> bool:
+        evidence = rec.get("evidence")
+        if not isinstance(evidence, dict):
+            return False
+
+        why_text = str(rec.get("why") or "").lower()
+        if not why_text:
+            return False
+
+        message_lower = (message or "").lower()
+        cited_fields = [
+            str(f) for f in (evidence.get("profile_fields_cited") or [])
+            if isinstance(f, str)
+        ]
+        cited_phrases = [
+            str(p) for p in (evidence.get("prompt_phrases_cited") or [])
+            if isinstance(p, str) and str(p).strip()
+        ]
+
+        valid_fields = [
+            f for f in cited_fields
+            if f in self._ALLOWED_EVIDENCE_FIELDS
+            and self._profile_field_value(user_profile, f) not in (None, "", [], {})
+        ]
+        valid_phrases = [
+            p for p in cited_phrases if p.lower().strip() in message_lower
+        ]
+
+        if not valid_fields and not valid_phrases:
+            return False
+
+        # The cited evidence must actually appear in the user-facing copy.
+        anchors = [f.split(".")[-1].lower() for f in valid_fields]
+        anchors += [p.lower().strip() for p in valid_phrases]
+        return any(anchor and anchor in why_text for anchor in anchors)
+
+    def find_unjustified_recommendations(
+        self,
+        parsed: dict[str, Any],
+        user_profile: dict[str, Any],
+        message: str,
+    ) -> list[int]:
+        recs = parsed.get("recommendations") or []
+        unjustified: list[int] = []
+        for index, rec in enumerate(recs):
+            if not isinstance(rec, dict):
+                continue
+            if not self._evidence_is_valid(rec, user_profile, message):
+                unjustified.append(index)
+        return unjustified
+
+    def retry_synthesis_for_unjustified(
+        self,
+        parsed: dict[str, Any],
+        unjustified_ranks: list[int],
+        base_messages: list[dict[str, Any]],
+        token_usage: list[dict[str, Any]],
+        tool_trace: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        recs = parsed.get("recommendations") or []
+        targets = [recs[i] for i in unjustified_ranks if 0 <= i < len(recs)]
+        if not targets:
+            return parsed
+
+        retry_started = time.perf_counter()
+        target_summary = [
+            {
+                "rank": rec.get("rank"),
+                "place": rec.get("place"),
+                "current_why": rec.get("why"),
+                "current_tradeoffs": rec.get("tradeoffs"),
+                "current_evidence": rec.get("evidence"),
+            }
+            for rec in targets
+        ]
+
+        retry_messages = list(base_messages) + [
+            {
+                "role": "assistant",
+                "content": json.dumps(parsed)[:4000],
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Your previous response did not cite required user-profile fields or verbatim prompt "
+                    "phrases for these recommendations. Rewrite ONLY their `why`, `tradeoffs`, and `evidence` "
+                    "to satisfy the GROUNDING RULES. Keep everything else (place, address, score, "
+                    "order_suggestions, sources_used, google_maps_url) identical to your previous response. "
+                    "Return the full updated JSON in the same schema.\n\n"
+                    f"Recommendations to fix:\n{json.dumps(target_summary, indent=2)}"
+                ),
+            },
+        ]
+
+        try:
+            text = self.call_nemotron_text(
+                messages=retry_messages,
+                max_tokens=2000,
+                temperature=0.2,
+                purpose="chat.final_synthesis.retry",
+                route="/chat",
+                token_usage=token_usage,
+                retry=True,
+            )
+            updated = self.extract_json_from_text(text)
+        except Exception as exc:
+            tool_trace.append(
+                {
+                    "tool": "nemotron_grounding_retry",
+                    "status": "error",
+                    "error": str(exc),
+                    "ranks": unjustified_ranks,
+                }
+            )
+            return parsed
+
+        updated_recs = updated.get("recommendations") if isinstance(updated, dict) else None
+        if not isinstance(updated_recs, list):
+            tool_trace.append(
+                {
+                    "tool": "nemotron_grounding_retry",
+                    "status": "error",
+                    "error": "retry response missing recommendations",
+                    "ranks": unjustified_ranks,
+                }
+            )
+            return parsed
+
+        updated_by_place = {
+            str((r.get("place") or "")).lower(): r
+            for r in updated_recs
+            if isinstance(r, dict)
+        }
+
+        replaced = 0
+        for index in unjustified_ranks:
+            if 0 <= index < len(recs):
+                key = str(recs[index].get("place") or "").lower()
+                replacement = updated_by_place.get(key)
+                if isinstance(replacement, dict):
+                    for field in ("why", "tradeoffs", "evidence"):
+                        if replacement.get(field) is not None:
+                            recs[index][field] = replacement[field]
+                    replaced += 1
+
+        tool_trace.append(
+            {
+                "tool": "nemotron_grounding_retry",
+                "status": "ok",
+                "ranks": unjustified_ranks,
+                "replaced": replaced,
+                "seconds": round(time.perf_counter() - retry_started, 3),
+            }
+        )
+        parsed["recommendations"] = recs
+        return parsed
 
     def normalize_chat_response(
         self,
@@ -918,6 +1214,22 @@ class ForagerAgent:
             source_restaurant = restaurant_by_name.get(place_name, {})
             if not rec.get("review_quotes"):
                 rec["review_quotes"] = source_restaurant.get("reviewQuotes", [])[:2]
+
+            # Promote enrichment fields from the underlying restaurant onto
+            # the user-facing recommendation (Nemotron doesn't echo them back).
+            if source_restaurant:
+                if rec.get("lat") is None:
+                    rec["lat"] = source_restaurant.get("latitude")
+                if rec.get("lng") is None:
+                    rec["lng"] = source_restaurant.get("longitude")
+                if not rec.get("website"):
+                    rec["website"] = source_restaurant.get("websiteUri")
+                if not rec.get("price"):
+                    rec["price"] = source_restaurant.get("priceLevelLabel")
+                if not rec.get("opening_hours_today"):
+                    rec["opening_hours_today"] = source_restaurant.get("openingHoursToday")
+                if not rec.get("google_maps_url"):
+                    rec["google_maps_url"] = source_restaurant.get("googleMapsUri")
 
             suggestions = rec.get("order_suggestions")
             fallback_suggestions = self.generic_order_suggestions(intent)
@@ -948,12 +1260,25 @@ class ForagerAgent:
             suggestions = rec["order_suggestions"]
 
             # Backward compatibility for the current frontend card.
-            if not rec.get("order") and suggestions:
+            if suggestions:
                 first = suggestions[0]
                 if isinstance(first, dict):
-                    rec["order"] = first.get("name") or ""
+                    if not rec.get("order"):
+                        rec["order"] = first.get("name") or ""
                     macros = _safe_dict(first.get("estimated_macros"))
                     rec["estimated_macros"] = macros
+                    # Promote price range so the card can show it next to the order.
+                    price_range = first.get("price_range_usd")
+                    if isinstance(price_range, dict) and not rec.get("price_range_usd"):
+                        try:
+                            rec["price_range_usd"] = {
+                                "min": float(price_range.get("min")),
+                                "max": float(price_range.get("max")),
+                            }
+                        except (TypeError, ValueError):
+                            pass
+                    if first.get("price_confidence") and not rec.get("price_confidence"):
+                        rec["price_confidence"] = first.get("price_confidence")
 
         return parsed
 
@@ -1136,6 +1461,7 @@ class ForagerAgent:
         purpose: str = "unknown",
         route: str = "unknown",
         token_usage: list[dict[str, Any]] | None = None,
+        retry: bool = False,
     ) -> str:
         if not self.client:
             raise RuntimeError("NVIDIA_API_KEY is missing.")
@@ -1158,7 +1484,7 @@ class ForagerAgent:
             purpose=purpose,
             model=self.model,
             route=route,
-            retry=False,
+            retry=retry,
         )
 
         text = self.get_message_text(response)

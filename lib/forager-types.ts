@@ -121,6 +121,25 @@ export type OrderSuggestion = {
     confidence: Confidence;
   };
   why: string;
+  /** Nemotron-estimated price range, anchored on Google priceLevel + cuisine. */
+  price_range_usd?: { min: number; max: number };
+  price_confidence?: "high" | "medium" | "low";
+};
+
+export type TodayHours = {
+  day: string;
+  open: string | null;
+  close: string | null;
+  open_now: boolean;
+  closes_at: string | null;
+  is_24h: boolean;
+  is_closed_today: boolean;
+  timezone: string | null;
+};
+
+export type RecommendationEvidence = {
+  profile_fields_cited: string[];
+  prompt_phrases_cited: string[];
 };
 
 export type ChatRecommendation = {
@@ -152,8 +171,25 @@ export type ChatRecommendation = {
   /** Estimated meal price in USD when known. */
   price_usd?: number;
 
+  /** Estimated price range in USD for the primary order suggestion. */
+  price_range_usd?: { min: number; max: number };
+  price_confidence?: "high" | "medium" | "low";
+
   /** Short user-review quotes pulled from Google Places (max ~2). Optional. */
   review_quotes?: string[];
+
+  /** Restaurant lat/lng (from Google Places). Used for ResultsMap pins. */
+  lat?: number;
+  lng?: number;
+
+  /** Restaurant website (from Google Places websiteUri). Used for "View menu" link. */
+  website?: string;
+
+  /** Today's opening hours in the restaurant's local time. Used by TimeCard. */
+  opening_hours_today?: TodayHours;
+
+  /** Which user-profile fields and prompt phrases the model cited in `why`. */
+  evidence?: RecommendationEvidence;
 };
 
 export type ToolTraceEntry = {

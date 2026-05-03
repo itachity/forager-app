@@ -1,11 +1,19 @@
 "use client";
 
-import { ExternalLink, Quote } from "lucide-react";
+import { ExternalLink, Quote, Utensils } from "lucide-react";
 import type { ChatRecommendation, UserProfile } from "@/lib/forager-types";
 import { MacroRangeBadge } from "./MacroRangeBadge";
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { AllergenFlag, intersectAllergens } from "./AllergenFlag";
+import { TimeCard } from "./TimeCard";
 import { cn } from "@/lib/utils";
+
+function formatPriceRange(rec: ChatRecommendation): string | null {
+  const range = rec.price_range_usd;
+  if (!range || typeof range.min !== "number" || typeof range.max !== "number") return null;
+  if (range.min === range.max) return `≈ $${Math.round(range.min)}`;
+  return `≈ $${Math.round(range.min)}–${Math.round(range.max)}`;
+}
 
 export function RecommendationCard({
   rec,
@@ -41,12 +49,23 @@ export function RecommendationCard({
             </h3>
           </div>
           <p className="text-xs text-muted-foreground mt-1">{rec.address}</p>
-          {(rec.price || typeof rec.price_usd === "number") && (
-            <p className="text-xs text-muted-foreground mt-1">
+          {(rec.price || typeof rec.price_usd === "number" || rec.website) && (
+            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
               {rec.price && <span className="font-semibold text-foreground">{rec.price}</span>}
-              {rec.price && typeof rec.price_usd === "number" && " · "}
-              {typeof rec.price_usd === "number" && (
-                <span>~${rec.price_usd}</span>
+              {rec.price && typeof rec.price_usd === "number" && <span>·</span>}
+              {typeof rec.price_usd === "number" && <span>~${rec.price_usd}</span>}
+              {rec.website && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={rec.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline"
+                  >
+                    <Utensils size={11} /> View menu
+                  </a>
+                </>
               )}
             </p>
           )}
@@ -58,10 +77,22 @@ export function RecommendationCard({
         )}
       </div>
 
+      {rec.opening_hours_today && <TimeCard hours={rec.opening_hours_today} />}
+
       {rec.order && (
         <div className="mt-3 rounded-2xl bg-primary-soft/60 p-3">
-          <div className="text-[11px] uppercase tracking-wider text-primary font-semibold">
-            Order this
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[11px] uppercase tracking-wider text-primary font-semibold">
+              Order this
+            </div>
+            {formatPriceRange(rec) && (
+              <div className="text-[11px] font-semibold text-primary">
+                {formatPriceRange(rec)}
+                <span className="ml-1 font-normal text-muted-foreground">
+                  (est.{rec.price_confidence ? ` · ${rec.price_confidence}` : ""})
+                </span>
+              </div>
+            )}
           </div>
           <p className="text-sm mt-1">{rec.order}</p>
         </div>
