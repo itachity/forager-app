@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Quote, Utensils } from "lucide-react";
+import { ExternalLink, Utensils } from "lucide-react";
 import type { ChatRecommendation, UserProfile } from "@/lib/forager-types";
 import { MacroRangeBadge } from "./MacroRangeBadge";
 import { ConfidenceBadge } from "./ConfidenceBadge";
@@ -127,21 +127,6 @@ export function RecommendationCard({
             Why
           </div>
           <p className="text-sm mt-1 leading-relaxed">{rec.why}</p>
-        </div>
-      )}
-
-      {rec.review_quotes && rec.review_quotes.length > 0 && (
-        <div className="mt-3 rounded-2xl bg-secondary/60 p-3">
-          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-            <Quote size={11} /> What people say on Google
-          </div>
-          <ul className="mt-2 space-y-1.5">
-            {rec.review_quotes.map((q, i) => (
-              <li key={i} className="text-sm italic leading-relaxed">
-                &ldquo;{q}&rdquo;
-              </li>
-            ))}
-          </ul>
         </div>
       )}
 

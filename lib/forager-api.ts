@@ -152,9 +152,6 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
         typeof r.price_usd === "number" && Number.isFinite(r.price_usd)
           ? r.price_usd
           : undefined,
-      review_quotes: Array.isArray(r.review_quotes)
-        ? (r.review_quotes as string[]).slice(0, 2)
-        : undefined,
     };
   });
   return {

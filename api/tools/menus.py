@@ -213,8 +213,8 @@ def repair_structured_menu_json(
                 "Required schema:\n"
                 "{\n"
                 '  "detected_language": {"name": "string or null", "iso_code": "string or null", "script": "string or null", "confidence": "high|medium|low"},\n'
-                '  "menu_context": {"restaurant_type": "string or null", "country_or_region_guess": "string or null", "currency": "string or null"},\n'
-                '  "ranked_candidates": [{"dish_original": "string", "dish_english": "string", "category": "main|side|drink|dessert|unknown", "likely_ingredients": ["string"], "cooking_method": "string or null", "protein_likelihood": "high|medium|low", "calorie_risk": "high|medium|low", "carb_risk": "high|medium|low", "fat_risk": "high|medium|low", "goal_fit_score": 0, "reason": "string"}],\n'
+                '  "menu_context": {"restaurant_type": "string or null", "country_or_region_guess": "string or null", "currency": "string or null", "cultural_norms": ["string (etiquette only — no nutrition/macros)"]},\n'
+                '  "ranked_candidates": [{"dish_original": "string", "dish_romanized": "string or null", "dish_english": "string", "category": "main|side|drink|dessert|unknown", "likely_ingredients": ["string"], "cooking_method": "string or null", "protein_likelihood": "high|medium|low", "calorie_risk": "high|medium|low", "carb_risk": "high|medium|low", "fat_risk": "high|medium|low", "goal_fit_score": 0, "estimated_macros": {"calories": "string", "protein": "string", "carbs": "string", "fat": "string"}, "macros_confidence": "high|medium|low", "reason": "string"}],\n'
                 '  "best_dish_original": "string or null",\n'
                 '  "best_dish_english": "string or null",\n'
                 '  "usda_queries": ["string"],\n'
@@ -239,6 +239,41 @@ def repair_structured_menu_json(
         return None
 
 
+_NUTRITION_TOKENS = (
+    "kcal", "calorie", "calories", "protein", "carb", "carbs", "carbohydrate",
+    "fat ", " fat", "fat:", "fats", "sugar", "sodium", "fiber", "macro", "grams of",
+    " g)", " g ", " g.", " g,", "extra vegetable", "low-fat", "low fat",
+)
+
+
+def _clean_etiquette_norms(norms: Any) -> list[str]:
+    """Drop bullets that are clearly nutrition/macro advice — etiquette only."""
+    out: list[str] = []
+    for item in safe_list(norms):
+        text = safe_string(item)
+        if not text:
+            continue
+        lowered = text.lower()
+        if any(token in lowered for token in _NUTRITION_TOKENS):
+            continue
+        out.append(text)
+    return out[:4]
+
+
+def _clean_estimated_macros(value: Any) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    cleaned = {
+        "calories": safe_string(value.get("calories")) or None,
+        "protein": safe_string(value.get("protein")) or None,
+        "carbs": safe_string(value.get("carbs")) or None,
+        "fat": safe_string(value.get("fat")) or None,
+    }
+    if not any(cleaned.values()):
+        return None
+    return {k: v for k, v in cleaned.items() if v}
+
+
 def validate_structured_menu(structured: dict[str, Any], menu_description: str) -> dict[str, Any]:
     detected_language = structured.get("detected_language")
     if not isinstance(detected_language, dict):
@@ -246,7 +281,14 @@ def validate_structured_menu(structured: dict[str, Any], menu_description: str) 
 
     menu_context = structured.get("menu_context")
     if not isinstance(menu_context, dict):
-        menu_context = {"restaurant_type": None, "country_or_region_guess": None, "currency": None}
+        menu_context = {"restaurant_type": None, "country_or_region_guess": None, "currency": None, "cultural_norms": []}
+    else:
+        menu_context = {
+            "restaurant_type": safe_string(menu_context.get("restaurant_type")) or None,
+            "country_or_region_guess": safe_string(menu_context.get("country_or_region_guess")) or None,
+            "currency": safe_string(menu_context.get("currency")) or None,
+            "cultural_norms": _clean_etiquette_norms(menu_context.get("cultural_norms")),
+        }
 
     cleaned_candidates = []
     for candidate in safe_list(structured.get("ranked_candidates")):
@@ -255,6 +297,7 @@ def validate_structured_menu(structured: dict[str, Any], menu_description: str) 
         cleaned_candidates.append(
             {
                 "dish_original": safe_string(candidate.get("dish_original")),
+                "dish_romanized": safe_string(candidate.get("dish_romanized")) or None,
                 "dish_english": safe_string(candidate.get("dish_english")),
                 "category": safe_string(candidate.get("category"), "unknown"),
                 "likely_ingredients": [safe_string(item) for item in safe_list(candidate.get("likely_ingredients")) if safe_string(item)],
@@ -264,6 +307,8 @@ def validate_structured_menu(structured: dict[str, Any], menu_description: str) 
                 "carb_risk": safe_string(candidate.get("carb_risk"), "medium"),
                 "fat_risk": safe_string(candidate.get("fat_risk"), "medium"),
                 "goal_fit_score": float(candidate.get("goal_fit_score") or 0),
+                "estimated_macros": _clean_estimated_macros(candidate.get("estimated_macros")),
+                "macros_confidence": safe_string(candidate.get("macros_confidence"), "low"),
                 "reason": safe_string(candidate.get("reason")),
             }
         )
@@ -318,12 +363,24 @@ def build_structured_menu_messages(
                 "- For high-protein or low-calorie goals, prefer protein-forward items over carb-heavy items.\n"
                 "- Penalize rice, noodles, bread, dessert, sugary drinks, deep-fried food, cream, cheese, and heavy sauces when relevant.\n"
                 "- Respect allergens and diet rules as risk flags.\n"
-                "- USDA queries must be in English.\n\n"
+                "- USDA queries must be in English.\n"
+                "- For EACH ranked candidate, ALWAYS include `dish_romanized` (Hepburn romaji for Japanese, "
+                "Hanyu pinyin with tone marks for Chinese, Revised Romanization for Korean, transliteration for "
+                "Cyrillic/Thai/Arabic/etc.) so non-native readers can pronounce it. If the original name is already in "
+                "Latin script, set `dish_romanized` to null.\n"
+                "- For EACH ranked candidate, ALWAYS include `estimated_macros` with realistic RANGES (e.g., \"450-550 kcal\", "
+                "\"25-30 g\") based on the dish, ingredients, cooking method, and typical restaurant portion. Use \"unknown\" "
+                "ONLY when the dish is too vague to estimate (e.g., a single word that could mean many things). Include a "
+                "`macros_confidence` field: high|medium|low.\n"
+                "- `menu_context.cultural_norms` MUST be 2-4 short ETIQUETTE/SERVICE bullets ONLY (e.g., chopstick "
+                "etiquette, slurping is polite, tipping norms, paying at the counter, common allergen disclosure customs). "
+                "DO NOT put macros, nutrition advice, ingredient swaps, or health tips in this field — those belong in "
+                "`ranked_candidates[].reason` or `estimated_macros`. If you have no cultural etiquette info, return [].\n\n"
                 "Required JSON schema:\n"
                 "{\n"
                 '  "detected_language": {"name": "string or null", "iso_code": "string or null", "script": "string or null", "confidence": "high|medium|low"},\n'
-                '  "menu_context": {"restaurant_type": "string or null", "country_or_region_guess": "string or null", "currency": "string or null"},\n'
-                '  "ranked_candidates": [{"dish_original": "string", "dish_english": "string", "category": "main|side|drink|dessert|unknown", "likely_ingredients": ["string"], "cooking_method": "string or null", "protein_likelihood": "high|medium|low", "calorie_risk": "high|medium|low", "carb_risk": "high|medium|low", "fat_risk": "high|medium|low", "goal_fit_score": 0, "reason": "string"}],\n'
+                '  "menu_context": {"restaurant_type": "string or null", "country_or_region_guess": "string or null", "currency": "string or null", "cultural_norms": ["string"]},\n'
+                '  "ranked_candidates": [{"dish_original": "string", "dish_romanized": "string or null", "dish_english": "string", "category": "main|side|drink|dessert|unknown", "likely_ingredients": ["string"], "cooking_method": "string or null", "protein_likelihood": "high|medium|low", "calorie_risk": "high|medium|low", "carb_risk": "high|medium|low", "fat_risk": "high|medium|low", "goal_fit_score": 0, "estimated_macros": {"calories": "string", "protein": "string", "carbs": "string", "fat": "string"}, "macros_confidence": "high|medium|low", "reason": "string"}],\n'
                 '  "best_dish_original": "string or null",\n'
                 '  "best_dish_english": "string or null",\n'
                 '  "usda_queries": ["string"],\n'
@@ -427,7 +484,7 @@ def analyze_menu_image_bytes(
     if structured_raw is None:
         structured = {
             "detected_language": {"name": None, "iso_code": None, "script": None, "confidence": "low"},
-            "menu_context": {"restaurant_type": None, "country_or_region_guess": None, "currency": None},
+            "menu_context": {"restaurant_type": None, "country_or_region_guess": None, "currency": None, "cultural_norms": []},
             "ranked_candidates": [],
             "best_dish_original": None,
             "best_dish_english": None,

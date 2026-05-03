@@ -842,7 +842,6 @@ class ForagerAgent:
                 "openingHoursToday": r.get("openingHoursToday"),
                 "primaryType": r.get("primaryType"),
                 "types": r.get("types", []),
-                "reviewQuotes": r.get("reviewQuotes", []),
                 "score": r.get("score"),
             }
             for r in restaurants[:20]
@@ -862,35 +861,49 @@ class ForagerAgent:
                     "5. Clearly label macro confidence: high, medium, medium-low, or low.\n"
                     "6. Do not give medical advice. If allergies exist, warn the user to verify with the restaurant.\n"
                     "7. Do not claim Reddit/community sentiment unless community_signal.status is 'ok'.\n"
-                    "8. If reviewQuotes are present, you may use at most one short quote in why. Do not fabricate quotes.\n"
-                    "9. Review quotes only support restaurant vibe/quality, not macro accuracy.\n"
-                    "10. sources_used must list real sources such as Google Places, USDA FoodData Central, Nemotron, and Forager scoring.\n"
-                    "11. Respect profile_mode and use_profile from recommendation_context.\n\n"
+                    "8. sources_used must list real sources such as Google Places, USDA FoodData Central, Nemotron, and Forager scoring.\n"
+                    "9. Respect profile_mode and use_profile from recommendation_context.\n\n"
                     "GROUNDING RULES (HARD REQUIREMENTS):\n"
-                    "G1. Every recommendation's `why` MUST cite at least one of the following: a specific user-profile field "
+                    "G1. Every recommendation's `why` MUST be anchored to either a specific user-profile field "
                     "(`dietary.allergens`, `dietary.avoidIngredients`, `dietary.dietRules.*`, `dietary.spiceTolerance`, "
                     "`nutritionGoals.goalType`, `nutritionGoals.proteinMinGrams`, `nutritionGoals.caloriesMax`, "
                     "`preferences.budget`, `preferences.likedCuisines`, `preferences.likedFoods`, "
                     "`preferences.preferredOrderTerms`, `preferences.maxDistanceMiles`) OR a verbatim phrase from the user's "
-                    "original message. Generic restaurant blurb without a profile/prompt anchor is NOT acceptable.\n"
-                    "G2. Every recommendation's `tradeoffs` MUST acknowledge a specific profile constraint or prompt phrase "
-                    "this restaurant only partially satisfies (e.g. budget mismatch, missing dietRule, lower protein than goal, "
-                    "farther than maxDistanceMiles). Do not write generic 'higher price point' tradeoffs unless price actually "
-                    "conflicts with the user's `preferences.budget`.\n"
-                    "G3. For each recommendation include an `evidence` object listing which profile fields and which prompt "
-                    "phrases you cited. Use the exact dotted profile-field names from the list above. Quote prompt phrases "
-                    "verbatim and case-sensitively as they appear in the user's original message.\n\n"
+                    "original message. Generic restaurant blurb without a real anchor is NOT acceptable.\n"
+                    "G2. Every recommendation's `tradeoffs` MUST acknowledge a real profile constraint or prompt phrase "
+                    "this restaurant only partially satisfies (e.g. distance, missing diet rule, lower protein than goal, "
+                    "limited hours). Do not invent a tradeoff that doesn't actually conflict with the user's profile.\n"
+                    "G3. List the anchors in the structured `evidence` object: `profile_fields_cited` (use the exact dotted "
+                    "field names from the list above) and `prompt_phrases_cited` (verbatim phrases from the user's message). "
+                    "This is the ONLY place where dotted field names are allowed.\n\n"
+                    "COPY STYLE (HARD REQUIREMENTS) — read these carefully:\n"
+                    "S1. `why` and `tradeoffs` must read like a friendly waiter giving a quick recommendation. Plain English. "
+                    "1-2 short sentences each. No bullet lists, no headings, no markdown.\n"
+                    "S2. NEVER include profile field names like `nutritionGoals.goalType`, `preferences.maxDistanceMiles`, "
+                    "or `dietary.allergens` in the prose. NEVER add a parenthetical `(cited: …)` or any technical reference. "
+                    "The `evidence` object is the ONLY place that names fields.\n"
+                    "S3. Translate field VALUES into natural language: `goalType: \"high_protein\"` → \"high protein\"; "
+                    "`budget: \"cheap\"` → \"cheap\" or \"easy on the wallet\"; `maxDistanceMiles: 5` → \"close by (0.4 mi)\"; "
+                    "`allergens: [\"peanut\"]` → \"peanut-free\". When citing a number, use the natural unit (mi, g, kcal).\n"
+                    "S4. SKIP no-op profile values. If `budget == \"any\"`, `goalType == \"none\"`, `allergens == []`, or any "
+                    "field is empty/default, do not mention it at all. Only call out preferences that actually shaped the pick.\n"
+                    "S5. Do not quote raw values like `'any'` or `'none'` in the prose; if you'd be quoting a default, "
+                    "drop the clause entirely.\n\n"
                     "PRICE-RANGE RULES:\n"
                     "P1. Every order_suggestion MUST include `price_range_usd: {min, max}` and `price_confidence` "
                     "(high|medium|low). Anchor the range on the restaurant's `priceLevel` / `priceLevelLabel`, the cuisine, "
                     "and the city in `address`. Always return a range, never a single point — widen the range and lower "
                     "confidence when uncertain. If `priceLevel` is missing, use `low` confidence.\n\n"
-                    "EXAMPLE (illustrative, not literal):\n"
-                    'User message: "something high protein near me, ideally cheap"\n'
-                    'profile.nutritionGoals.goalType = "high_protein", profile.preferences.budget = "cheap".\n'
-                    "A grounded `why`: \"Matches your high_protein goal (35-40g per bowl) and your 'cheap' budget — "
-                    "Google priceLevel here is INEXPENSIVE, and you said 'near me' so 0.4 mi is well inside your maxDistance.\"\n"
-                    "A grounded `tradeoffs`: \"Limited vegetarian options if your dietRules later change; otherwise no profile conflicts.\"\n"
+                    "EXAMPLES (illustrative, not literal):\n"
+                    "Setup: user said \"something high protein near me, ideally cheap\". "
+                    "Profile has goalType=high_protein, budget=cheap, maxDistanceMiles=5, allergens=[].\n"
+                    "GOOD `why`: \"Hits your high-protein target — the bowl runs about 35-40g — and stays cheap. "
+                    "It's only 0.4 mi away, easy walk.\"\n"
+                    "GOOD `tradeoffs`: \"Limited vegetarian options if that ever matters to you.\"\n"
+                    "BAD `why` (do NOT do this): \"Matches nutritionGoals.goalType (high_protein, 35-40g) and "
+                    "preferences.budget ('cheap'); 0.4 mi is within preferences.maxDistanceMiles (cited: …).\"\n"
+                    "BAD `tradeoffs` (do NOT do this): \"Price slightly higher than budget 'any' but within moderate range.\" "
+                    "(`any` is the no-op default — drop that clause entirely.)\n"
                     'evidence: {"profile_fields_cited": ["nutritionGoals.goalType","preferences.budget","preferences.maxDistanceMiles"], '
                     '"prompt_phrases_cited": ["high protein","cheap","near me"]}\n\n'
                     "Return JSON only. No markdown.\n\n"
@@ -905,7 +918,6 @@ class ForagerAgent:
                     '      "address": "string",\n'
                     '      "score": 0,\n'
                     '      "why": "string",\n'
-                    '      "review_quotes": ["string"],\n'
                     '      "order_suggestions": [\n'
                     "        {\n"
                     '          "name": "string",\n'
@@ -1025,6 +1037,9 @@ class ForagerAgent:
         "preferences.maxDistanceMiles",
     }
 
+    # Profile values that are no-ops and should NOT count as anchors.
+    _NO_OP_PROFILE_VALUES = {"any", "none", "balanced", "guest", "normal"}
+
     def _profile_field_value(self, user_profile: dict[str, Any], path: str) -> Any:
         cursor: Any = user_profile
         for part in path.split("."):
@@ -1033,12 +1048,54 @@ class ForagerAgent:
             cursor = cursor.get(part)
         return cursor
 
+    def _value_anchors(self, value: Any) -> list[str]:
+        """Plain-English forms a model would actually write for a profile value.
+
+        Examples:
+          "high_protein" -> ["high protein", "high-protein", "high_protein"]
+          ["peanut", "shellfish"] -> ["peanut", "shellfish"]
+          True -> []
+          5 -> ["5"]
+        """
+        if value is None or value == "" or value == [] or value == {}:
+            return []
+        if isinstance(value, bool):
+            return []
+        if isinstance(value, (int, float)):
+            return [str(value)]
+        if isinstance(value, list):
+            anchors: list[str] = []
+            for item in value:
+                anchors.extend(self._value_anchors(item))
+            return anchors
+        if isinstance(value, str):
+            text = value.strip().lower()
+            if not text or text in self._NO_OP_PROFILE_VALUES:
+                return []
+            forms = {text}
+            if "_" in text:
+                forms.add(text.replace("_", " "))
+                forms.add(text.replace("_", "-"))
+            if " " in text:
+                forms.add(text.replace(" ", "-"))
+            return list(forms)
+        return []
+
     def _evidence_is_valid(
         self,
         rec: dict[str, Any],
         user_profile: dict[str, Any],
         message: str,
     ) -> bool:
+        """Plain-English-friendly grounding check.
+
+        A rec passes if its `why` mentions either:
+          - a verbatim phrase from the user's prompt that the model claims to have cited, OR
+          - the human-readable VALUE of a cited profile field (e.g. "high protein"
+            for goalType=high_protein, "peanut" for allergens=["peanut"]).
+        Field NAMES (e.g. "goalType") are no longer required in the prose — the
+        new prompt forbids them.
+        """
         evidence = rec.get("evidence")
         if not isinstance(evidence, dict):
             return False
@@ -1057,21 +1114,21 @@ class ForagerAgent:
             if isinstance(p, str) and str(p).strip()
         ]
 
-        valid_fields = [
-            f for f in cited_fields
-            if f in self._ALLOWED_EVIDENCE_FIELDS
-            and self._profile_field_value(user_profile, f) not in (None, "", [], {})
-        ]
-        valid_phrases = [
-            p for p in cited_phrases if p.lower().strip() in message_lower
-        ]
+        anchors: list[str] = []
+        for field in cited_fields:
+            if field not in self._ALLOWED_EVIDENCE_FIELDS:
+                continue
+            value = self._profile_field_value(user_profile, field)
+            anchors.extend(self._value_anchors(value))
 
-        if not valid_fields and not valid_phrases:
+        for phrase in cited_phrases:
+            phrase_lower = phrase.lower().strip()
+            if phrase_lower and phrase_lower in message_lower:
+                anchors.append(phrase_lower)
+
+        if not anchors:
             return False
 
-        # The cited evidence must actually appear in the user-facing copy.
-        anchors = [f.split(".")[-1].lower() for f in valid_fields]
-        anchors += [p.lower().strip() for p in valid_phrases]
         return any(anchor and anchor in why_text for anchor in anchors)
 
     def find_unjustified_recommendations(
@@ -1251,8 +1308,6 @@ class ForagerAgent:
                                 break
                     if not source_restaurant:
                         match_outcomes["miss"] += 1
-            if not rec.get("review_quotes"):
-                rec["review_quotes"] = source_restaurant.get("reviewQuotes", [])[:2]
 
             # Promote enrichment fields from the underlying restaurant onto
             # the user-facing recommendation (Nemotron doesn't echo them back).
@@ -1366,7 +1421,6 @@ class ForagerAgent:
                         "This restaurant ranked well based on Google rating, distance, price, "
                         "availability, preference match, and the macro-fit heuristic."
                     ),
-                    "review_quotes": restaurant.get("reviewQuotes", [])[:2],
                     "tradeoffs": "Macro estimate needs Nemotron synthesis and/or menu confirmation.",
                     "sources_used": [
                         "Google Places",
@@ -1389,7 +1443,6 @@ class ForagerAgent:
                     "estimated_macros": order_suggestions[0].get("estimated_macros"),
                     "order_suggestions": order_suggestions,
                     "why": "No restaurant data was available. Check location/API keys.",
-                    "review_quotes": [],
                     "tradeoffs": "No Google Places results available.",
                     "sources_used": ["fallback"],
                     "google_maps_url": None,
