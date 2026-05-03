@@ -28,6 +28,65 @@ DEFAULT_CITY = os.getenv("DEFAULT_CITY")
 DEFAULT_COUNTRY = os.getenv("DEFAULT_COUNTRY")
 
 
+def _safe_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def profile_budget(user_profile: dict[str, Any]) -> str | None:
+    preferences = user_profile.get("preferences")
+    if isinstance(preferences, dict):
+        budget = preferences.get("budget")
+        if isinstance(budget, str) and budget.strip() and budget.strip().lower() != "any":
+            return budget.strip().lower()
+
+    budget = user_profile.get("budget")
+    if isinstance(budget, str) and budget.strip() and budget.strip().lower() != "any":
+        return budget.strip().lower()
+
+    return None
+
+
+def profile_radius_meters(user_profile: dict[str, Any]) -> float:
+    preferences = user_profile.get("preferences")
+    if isinstance(preferences, dict):
+        max_distance = preferences.get("maxDistanceMiles")
+        if isinstance(max_distance, (int, float)) and max_distance > 0:
+            return float(max_distance) * 1609.344
+
+    radius = user_profile.get("radius_meters")
+    if isinstance(radius, (int, float)) and radius > 0:
+        return float(radius)
+
+    return 5000.0
+
+
+
+
+def profile_order_terms(user_profile: dict[str, Any]) -> tuple[list[str], list[str]]:
+    preferences = user_profile.get("preferences") if isinstance(user_profile.get("preferences"), dict) else {}
+    preferred = _safe_list(preferences.get("preferredOrderTerms"))
+    avoid = _safe_list(preferences.get("avoidOrderTerms"))
+    return preferred, avoid
+
+def profile_dietary_lists(user_profile: dict[str, Any]) -> tuple[list[str], list[str]]:
+    dietary = user_profile.get("dietary") if isinstance(user_profile.get("dietary"), dict) else {}
+    restrictions = _safe_list(user_profile.get("dietary_restrictions"))
+    restrictions.extend(_safe_list(dietary.get("avoidIngredients")))
+
+    diet_rules = dietary.get("dietRules") if isinstance(dietary.get("dietRules"), dict) else {}
+    for key, enabled in diet_rules.items():
+        if enabled is True:
+            restrictions.append(str(key))
+
+    restrictions = list(dict.fromkeys([r for r in restrictions if r]))
+    allergies = _safe_list(user_profile.get("allergies"))
+    allergies.extend(_safe_list(dietary.get("allergens")))
+    allergies = list(dict.fromkeys([a for a in allergies if a]))
+    return restrictions, allergies
+
+
 class ForagerAgent:
     def __init__(self) -> None:
         self.nvidia_api_key = NVIDIA_API_KEY
@@ -381,21 +440,26 @@ class ForagerAgent:
 
         city = location.get("city") or user_profile.get("city")
         country = location.get("country") or user_profile.get("country")
+        budget_from_profile = profile_budget(user_profile)
+        dietary_restrictions, allergies = profile_dietary_lists(user_profile)
+        preferred_order_terms, avoid_order_terms = profile_order_terms(user_profile)
 
         fallback_intent = {
             "message": message,
             "cuisine": cuisine,
             "craving": message,
-            "budget": budget or user_profile.get("budget"),
+            "budget": budget or budget_from_profile,
             "macro_goal": macro_goal,
             "max_calories": max_calories,
-            "dietary_restrictions": user_profile.get("dietary_restrictions", []),
-            "allergies": user_profile.get("allergies", []),
+            "dietary_restrictions": dietary_restrictions,
+            "allergies": allergies,
             "city": city,
             "country": country,
             "lat": location.get("lat"),
             "lng": location.get("lng"),
-            "radius_meters": user_profile.get("radius_meters", 5000),
+            "radius_meters": profile_radius_meters(user_profile),
+            "preferred_order_terms": preferred_order_terms,
+            "avoid_order_terms": avoid_order_terms,
             "subreddits": [],
             "needs_restaurant_search": True,
             "needs_macro_estimate": True,
