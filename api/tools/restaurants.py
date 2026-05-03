@@ -203,16 +203,13 @@ def macro_fit_score(intent: dict[str, Any], place: dict[str, Any]) -> float:
 
 
 def community_score_for_place(place: dict[str, Any], community_by_name: dict[str, Any]) -> float:
-    if not community_by_name:
-        return 0.5
-
-    name = (place.get("name") or "").lower()
-
-    for restaurant_name, data in community_by_name.items():
-        if restaurant_name.lower() in name or name in restaurant_name.lower():
-            return float(data.get("score", 0.5))
-
-    return 0.5
+    _ = community_by_name
+    rating_signal = bayesian_rating_score(
+        place.get("rating"),
+        place.get("reviewCount"),
+    )
+    default_community_floor = 0.55
+    return max(default_community_floor, rating_signal)
 
 
 def compute_total_score(
@@ -236,10 +233,12 @@ def compute_total_score(
         "availability": availability_score(place.get("openNow")),
     }
 
+    active_weights = dict(SCORE_WEIGHTS)
+    total_weight = sum(active_weights.values()) or 1.0
     weighted_score = sum(
-        components[name] * SCORE_WEIGHTS[name]
-        for name in SCORE_WEIGHTS
-    )
+        components[name] * active_weights[name]
+        for name in active_weights
+    ) / total_weight
 
     return {
         "total": round(weighted_score * 100, 2),
@@ -247,7 +246,10 @@ def compute_total_score(
             name: round(value * 100, 2)
             for name, value in components.items()
         },
-        "weights": SCORE_WEIGHTS,
+        "weights": {
+            name: round(value, 4)
+            for name, value in active_weights.items()
+        },
     }
 
 
