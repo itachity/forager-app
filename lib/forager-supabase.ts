@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { UserProfile } from "./forager-types";
+import type { TokenUsageSummary, UserProfile } from "./forager-types";
 import { profileToRow, rowToProfile, type ProfileRow } from "./forager-mappings";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,4 +79,70 @@ export async function getAuthUser(): Promise<{
 export async function signOut(): Promise<void> {
   if (!supabase) return;
   await supabase.auth.signOut();
+}
+
+export type TokenUsageLogRow = {
+  id?: string;
+  auth_user_id?: string | null;
+  route: string;
+  provider: string;
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  call_count: number;
+  usage_json: TokenUsageSummary;
+  metadata?: Record<string, unknown> | null;
+  created_at?: string;
+};
+
+/**
+ * Optional persistence for Nemotron token usage.
+ *
+ * Create a Supabase table named `token_usage_logs` before calling this:
+ *
+ * create table token_usage_logs (
+ *   id uuid primary key default gen_random_uuid(),
+ *   auth_user_id uuid null,
+ *   route text not null,
+ *   provider text not null,
+ *   model text not null,
+ *   prompt_tokens integer not null default 0,
+ *   completion_tokens integer not null default 0,
+ *   total_tokens integer not null default 0,
+ *   call_count integer not null default 0,
+ *   usage_json jsonb not null,
+ *   metadata jsonb,
+ *   created_at timestamptz not null default now()
+ * );
+ */
+export async function saveTokenUsageRemote(args: {
+  authUserId?: string | null;
+  route: string;
+  tokenUsage?: TokenUsageSummary;
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  if (!supabase) return false;
+  if (!args.tokenUsage) return false;
+
+  const totals = args.tokenUsage.totals;
+  const row: TokenUsageLogRow = {
+    auth_user_id: args.authUserId ?? null,
+    route: args.route,
+    provider: args.tokenUsage.provider,
+    model: args.tokenUsage.model,
+    prompt_tokens: totals.prompt_tokens,
+    completion_tokens: totals.completion_tokens,
+    total_tokens: totals.total_tokens,
+    call_count: totals.call_count,
+    usage_json: args.tokenUsage,
+    metadata: args.metadata ?? null,
+  };
+
+  const { error } = await supabase.from("token_usage_logs").insert(row);
+  if (error) {
+    console.warn("[forager] token usage insert failed", error);
+    return false;
+  }
+  return true;
 }

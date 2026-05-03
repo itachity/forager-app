@@ -85,12 +85,75 @@ export type ChatRequest = {
 
 export type Confidence = "high" | "medium" | "medium-low" | "low";
 
+export type TokenUsageCall = {
+  provider: "nvidia" | string;
+  model: string;
+  route: string;
+  purpose: string;
+  retry?: boolean;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  prompt_tokens_details?: unknown;
+  completion_tokens_details?: unknown;
+};
+
+export type TokenUsageSummary = {
+  provider: "nvidia" | string;
+  model: string;
+  calls: TokenUsageCall[];
+  totals: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    call_count: number;
+  };
+};
+
+export type OrderSuggestion = {
+  name: string;
+  modifications: string[];
+  estimated_macros: {
+    calories: string;
+    protein: string;
+    carbs: string;
+    fat: string;
+    confidence: Confidence;
+  };
+  why: string;
+  /** Nemotron-estimated price range, anchored on Google priceLevel + cuisine. */
+  price_range_usd?: { min: number; max: number };
+  price_confidence?: "high" | "medium" | "low";
+};
+
+export type TodayHours = {
+  day: string;
+  open: string | null;
+  close: string | null;
+  open_now: boolean;
+  closes_at: string | null;
+  is_24h: boolean;
+  is_closed_today: boolean;
+  timezone: string | null;
+};
+
+export type RecommendationEvidence = {
+  profile_fields_cited: string[];
+  prompt_phrases_cited: string[];
+};
+
 export type ChatRecommendation = {
   rank: number;
   place: string;
   address: string;
   score: number;
-  order: string;
+
+  /** Backward-compatible single order shown by older UI cards. */
+  order?: string;
+
+  /** New preferred shape: at least 3 order ideas per restaurant. */
+  order_suggestions?: OrderSuggestion[];
+
   calories?: string;
   protein?: string;
   carbs?: string;
@@ -100,23 +163,43 @@ export type ChatRecommendation = {
   tradeoffs?: string;
   sources_used: string[];
   google_maps_url?: string;
+
   /** Display label like "$" / "$$" / "$$$" — populated when backend
    * surfaces Google Places `priceLevel`. */
   price?: string;
+
   /** Estimated meal price in USD when known. */
   price_usd?: number;
+
+  /** Estimated price range in USD for the primary order suggestion. */
+  price_range_usd?: { min: number; max: number };
+  price_confidence?: "high" | "medium" | "low";
+
   /** Short user-review quotes pulled from Google Places (max ~2). Optional. */
   review_quotes?: string[];
+
+  /** Restaurant lat/lng (from Google Places). Used for ResultsMap pins. */
+  lat?: number;
+  lng?: number;
+
+  /** Restaurant website (from Google Places websiteUri). Used for "View menu" link. */
+  website?: string;
+
+  /** Today's opening hours in the restaurant's local time. Used by TimeCard. */
+  opening_hours_today?: TodayHours;
+
+  /** Which user-profile fields and prompt phrases the model cited in `why`. */
+  evidence?: RecommendationEvidence;
 };
 
 export type ToolTraceEntry = {
   tool: string;
   status: "ok" | "error" | "skipped" | string;
   count?: number;
-  reason?: string;
+  reason?: string | null;
   error?: string;
   output?: unknown;
-  weights?: Record<string, number>;
+  weights?: Record<string, number | string>;
   queries?: string[];
   radius_meters?: number;
 };
@@ -126,6 +209,7 @@ export type ChatResponse = {
   recommendations: ChatRecommendation[];
   tool_trace?: ToolTraceEntry[];
   limitations?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type FollowUpQuestion = {
@@ -147,14 +231,23 @@ export type FoodMacros = {
 };
 
 export type AnalyzeFoodResponse = {
+  status?: "ok" | "error" | string;
+  filename?: string;
   dish: string;
   confidence: number; // 0..1
-  cuisine?: string;
+  cuisine?: string | null;
+  detectedLanguage?: string | null;
+  recordText?: string | null;
+  record_text?: string;
   ingredients: string[];
   followUpQuestions: FollowUpQuestion[];
   macros: FoodMacros;
   logSuggestions: string[];
   nextOrderTips: string[];
+  structured_identification?: unknown;
+  usda_references?: unknown[];
+  tools_used?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type MenuItem = {
@@ -172,11 +265,19 @@ export type MenuItem = {
 };
 
 export type AnalyzeMenuResponse = {
+  status?: "ok" | "error" | string;
   detectedLanguage: string;
   cuisine: string;
   overallCulturalNorms: string[];
   rankedItems: MenuItem[];
   prose?: string;
+  record_text?: string;
+  profile_context?: unknown;
+  menu_description?: string;
+  structured_analysis?: unknown;
+  usda_references?: unknown[];
+  tools_used?: string[];
+  token_usage?: TokenUsageSummary;
 };
 
 export type ApiResult<T> =

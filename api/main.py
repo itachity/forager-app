@@ -1,6 +1,8 @@
-from typing import Any
+from __future__ import annotations
 
+import json
 import os
+from typing import Any
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +43,17 @@ class ChatRequest(BaseModel):
     location: Location | None = None
 
 
+def parse_json_form(raw: str | None, fallback: Any) -> Any:
+    """Safely parse JSON passed inside multipart/form-data fields."""
+    if raw is None or raw == "":
+        return fallback
+
+    try:
+        return json.loads(raw)
+    except Exception:
+        return fallback
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {
@@ -61,12 +74,51 @@ async def chat(req: ChatRequest) -> dict[str, Any]:
 @app.post("/analyze-menu")
 async def analyze_menu(
     file: UploadFile = File(...),
-    goal: str = Form(...),
+    goal: str = Form("healthy low-calorie high-protein meal"),
+    profile: str = Form("{}"),
+    record_text: str = Form(""),
 ) -> dict[str, Any]:
+    """
+    Analyze a menu image with optional user profile and multilingual user note.
+
+    `record_text` can be any free-form note such as:
+    - "I want high protein but low calorie"
+    - "これはラーメン屋のメニューです"
+    - "Sin queso, por favor"
+    """
     image_bytes = await file.read()
+    user_profile = parse_json_form(profile, {})
 
     return await agent.analyze_menu_upload(
         image_bytes=image_bytes,
         filename=file.filename or "menu.jpg",
         goal=goal,
+        user_profile=user_profile,
+        record_text=record_text,
+    )
+
+
+@app.post("/analyze-food")
+async def analyze_food(
+    file: UploadFile = File(...),
+    profile: str = Form("{}"),
+    clarifications: str = Form("{}"),
+    record_text: str = Form(""),
+) -> dict[str, Any]:
+    """
+    Analyze a food/meal image and return macro ranges.
+
+    `record_text` lets the user add portion notes or context in any language.
+    `clarifications` is a JSON string from follow-up answers, when available.
+    """
+    image_bytes = await file.read()
+    user_profile = parse_json_form(profile, {})
+    clarification_data = parse_json_form(clarifications, {})
+
+    return await agent.analyze_food_upload(
+        image_bytes=image_bytes,
+        filename=file.filename or "meal.jpg",
+        user_profile=user_profile,
+        clarifications=clarification_data,
+        record_text=record_text,
     )

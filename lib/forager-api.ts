@@ -8,6 +8,8 @@ import type {
   Confidence,
   GeoLocation,
   MenuItem,
+  OrderSuggestion,
+  TokenUsageSummary,
   ToolTraceEntry,
   UserProfile,
 } from "./forager-types";
@@ -16,8 +18,7 @@ import { DEMO_CHAT, DEMO_FOOD_ANALYSIS, DEMO_MENU_ANALYSIS } from "./forager-fal
 import { resizeImage } from "./forager-image";
 import { phrasesForProfile } from "./forager-phrases";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export async function chat(
   req: { message: string; profile: UserProfile; location?: GeoLocation },
@@ -53,13 +54,18 @@ export async function analyzeFood(
   file: File,
   profile: UserProfile,
   clarifications?: Record<string, string>,
-  signal?: AbortSignal
+  recordTextOrSignal?: string | AbortSignal,
+  maybeSignal?: AbortSignal
 ): Promise<ApiResult<AnalyzeFoodResponse>> {
+  const recordText = typeof recordTextOrSignal === "string" ? recordTextOrSignal : "";
+  const signal = typeof recordTextOrSignal === "string" ? maybeSignal : recordTextOrSignal;
+
   try {
     const blob = await resizeImage(file);
     const fd = new FormData();
     fd.append("file", blob, file.name || "meal.jpg");
     fd.append("profile", JSON.stringify(profile));
+    fd.append("record_text", recordText);
     if (clarifications) fd.append("clarifications", JSON.stringify(clarifications));
     const r = await fetch(`${API_BASE}/analyze-food`, {
       method: "POST",
@@ -82,14 +88,19 @@ export async function analyzeFood(
 export async function analyzeMenu(
   file: File,
   profile: UserProfile,
-  signal?: AbortSignal
+  recordTextOrSignal?: string | AbortSignal,
+  maybeSignal?: AbortSignal
 ): Promise<ApiResult<AnalyzeMenuResponse>> {
+  const recordText = typeof recordTextOrSignal === "string" ? recordTextOrSignal : "";
+  const signal = typeof recordTextOrSignal === "string" ? maybeSignal : recordTextOrSignal;
+
   try {
     const blob = await resizeImage(file);
     const fd = new FormData();
     fd.append("file", blob, file.name || "menu.jpg");
     fd.append("goal", goalStringFromProfile(profile));
     fd.append("profile", JSON.stringify(profile));
+    fd.append("record_text", recordText);
     const r = await fetch(`${API_BASE}/analyze-menu`, {
       method: "POST",
       body: fd,
@@ -114,17 +125,24 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
   const recs = Array.isArray(raw.recommendations) ? (raw.recommendations as Record<string, unknown>[]) : [];
   const recommendations: ChatRecommendation[] = recs.slice(0, 3).map((r, idx) => {
     const macros = (r.estimated_macros as Record<string, unknown> | undefined) ?? undefined;
+    const suggestions = normalizeOrderSuggestions(r.order_suggestions);
+    const firstSuggestion = suggestions[0];
+    const firstMacros = firstSuggestion?.estimated_macros;
+
     return {
       rank: numOr(r.rank, idx + 1),
       place: strOr(r.place, "Unknown"),
       address: strOr(r.address, ""),
       score: numOr(r.score, 0),
-      order: strOr(r.order, ""),
-      calories: macros ? strOrUndefined(macros.calories) : undefined,
-      protein: macros ? strOrUndefined(macros.protein) : undefined,
-      carbs: macros ? strOrUndefined(macros.carbs) : undefined,
-      fat: macros ? strOrUndefined(macros.fat) : undefined,
-      confidence: macros ? (macros.confidence as Confidence | undefined) : undefined,
+      order: strOr(r.order, firstSuggestion?.name ?? ""),
+      order_suggestions: suggestions,
+      calories: macros ? strOrUndefined(macros.calories) : firstMacros?.calories,
+      protein: macros ? strOrUndefined(macros.protein) : firstMacros?.protein,
+      carbs: macros ? strOrUndefined(macros.carbs) : firstMacros?.carbs,
+      fat: macros ? strOrUndefined(macros.fat) : firstMacros?.fat,
+      confidence: macros
+        ? (macros.confidence as Confidence | undefined)
+        : firstMacros?.confidence,
       why: strOr(r.why, ""),
       tradeoffs: strOrUndefined(r.tradeoffs),
       sources_used: Array.isArray(r.sources_used) ? (r.sources_used as string[]) : [],
@@ -144,7 +162,27 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
     recommendations,
     tool_trace: Array.isArray(raw.tool_trace) ? (raw.tool_trace as ToolTraceEntry[]) : undefined,
     limitations: Array.isArray(raw.limitations) ? (raw.limitations as string[]) : undefined,
+    token_usage: normalizeTokenUsage(raw.token_usage),
   };
+}
+
+function normalizeOrderSuggestions(value: unknown): OrderSuggestion[] {
+  if (!Array.isArray(value)) return [];
+  return (value as Record<string, unknown>[]).slice(0, 5).map((item) => {
+    const macros = (item.estimated_macros as Record<string, unknown> | undefined) ?? {};
+    return {
+      name: strOr(item.name, ""),
+      modifications: Array.isArray(item.modifications) ? (item.modifications as string[]) : [],
+      estimated_macros: {
+        calories: strOr(macros.calories, "unknown"),
+        protein: strOr(macros.protein, "unknown"),
+        carbs: strOr(macros.carbs, "unknown"),
+        fat: strOr(macros.fat, "unknown"),
+        confidence: normalizeConfidence(macros.confidence),
+      },
+      why: strOr(item.why, ""),
+    };
+  });
 }
 
 /** Maps Google Places `PRICE_LEVEL_*` strings or 0..4 ints to "$"/"$$"/etc. */
@@ -167,13 +205,16 @@ function priceLabelFromLevel(level: unknown): string | undefined {
 }
 
 function normalizeFoodResponse(raw: Record<string, unknown>): AnalyzeFoodResponse {
-  // If backend returns the canonical shape directly, just trust it (best-effort
-  // shape coercion). Otherwise fall back to demo to avoid crashes.
   const macros = (raw.macros as Record<string, unknown> | undefined) ?? {};
   return {
+    status: strOrUndefined(raw.status),
+    filename: strOrUndefined(raw.filename),
     dish: strOr(raw.dish, "Unknown dish"),
     confidence: numOr(raw.confidence, 0.5),
-    cuisine: strOrUndefined(raw.cuisine),
+    cuisine: strOrUndefined(raw.cuisine) ?? null,
+    detectedLanguage: strOrUndefined(raw.detectedLanguage),
+    recordText: strOrUndefined(raw.recordText),
+    record_text: strOrUndefined(raw.record_text),
     ingredients: Array.isArray(raw.ingredients) ? (raw.ingredients as string[]) : [],
     followUpQuestions: Array.isArray(raw.followUpQuestions)
       ? (raw.followUpQuestions as AnalyzeFoodResponse["followUpQuestions"])
@@ -191,6 +232,10 @@ function normalizeFoodResponse(raw: Record<string, unknown>): AnalyzeFoodRespons
     },
     logSuggestions: Array.isArray(raw.logSuggestions) ? (raw.logSuggestions as string[]) : [],
     nextOrderTips: Array.isArray(raw.nextOrderTips) ? (raw.nextOrderTips as string[]) : [],
+    structured_identification: raw.structured_identification,
+    usda_references: Array.isArray(raw.usda_references) ? (raw.usda_references as unknown[]) : undefined,
+    tools_used: Array.isArray(raw.tools_used) ? (raw.tools_used as string[]) : undefined,
+    token_usage: normalizeTokenUsage(raw.token_usage),
   };
 }
 
@@ -234,6 +279,7 @@ function normalizeMenuResponse(raw: Record<string, unknown>, profile: UserProfil
   const overallCulturalNorms = extractBullets(prose ?? "", 4);
 
   return {
+    status: strOrUndefined(raw.status),
     detectedLanguage:
       strOrUndefined(detLang.name) ??
       LANGUAGE_DISPLAY_NAME[profile.language.preferredLanguage] ??
@@ -242,6 +288,13 @@ function normalizeMenuResponse(raw: Record<string, unknown>, profile: UserProfil
     overallCulturalNorms,
     rankedItems,
     prose,
+    record_text: strOrUndefined(raw.record_text),
+    profile_context: raw.profile_context,
+    menu_description: strOrUndefined(raw.menu_description),
+    structured_analysis: raw.structured_analysis,
+    usda_references: Array.isArray(raw.usda_references) ? (raw.usda_references as unknown[]) : undefined,
+    tools_used: Array.isArray(raw.tools_used) ? (raw.tools_used as string[]) : undefined,
+    token_usage: normalizeTokenUsage(raw.token_usage),
   };
 }
 
@@ -257,8 +310,6 @@ function phraseForDish(translatedName: string, profile: UserProfile): string {
     glutenFree: profile.dietary.dietRules.glutenFree,
     dairyFree: profile.dietary.dietRules.dairyFree,
   });
-  // Use the first allergy-relevant phrase if any, else fall back to "could I have water" which
-  // we replace with the dish name in English. Keep it simple for the hackathon.
   const lead = phrases.find((p) => p.local.includes("allerg") || p.local.includes("ベジタリアン") || p.local.includes("素"));
   if (lead) return `"${translatedName}", please. ${lead.local}`;
   return `I'd like the ${translatedName}, please.`;
@@ -292,6 +343,16 @@ function numOr(v: unknown, fallback: number): number {
 function clamp01to10(v: number): number {
   if (!Number.isFinite(v)) return 0;
   return Math.max(0, Math.min(10, v));
+}
+function normalizeConfidence(v: unknown): Confidence {
+  if (v === "high" || v === "medium" || v === "medium-low" || v === "low") return v;
+  return "low";
+}
+function normalizeTokenUsage(v: unknown): TokenUsageSummary | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const obj = v as TokenUsageSummary;
+  if (!obj.totals) return undefined;
+  return obj;
 }
 async function safeText(r: Response): Promise<string> {
   try {

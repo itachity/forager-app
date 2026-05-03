@@ -170,10 +170,16 @@ def build_macro_queries(intent: dict[str, Any]) -> list[str]:
     return queries[:3]
 
 
-def get_macro_references(intent: dict[str, Any], page_size: int = 3) -> list[dict[str, Any]]:
+def get_macro_references(
+    intent: dict[str, Any],
+    page_size: int = 3,
+    max_queries: int = 3,
+) -> list[dict[str, Any]]:
     references = []
 
-    for query in build_macro_queries(intent):
+    queries = build_macro_queries(intent)[:max(1, max_queries)]
+
+    for query in queries:
         try:
             references.append(search_usda_foods(query=query, page_size=page_size))
         except Exception as exc:
