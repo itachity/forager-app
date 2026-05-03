@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/forager/ToastProvider";
 import { chat } from "@/lib/forager-api";
 import { persistProfile } from "@/lib/forager-profile";
+import { useT } from "@/lib/forager-i18n-context";
 import type { GeoLocation, ProfileMode, UserProfile } from "@/lib/forager-types";
 import { cn } from "@/lib/utils";
 
 export function SearchPanel({ profile: initialProfile }: { profile: UserProfile }) {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useT();
   const [profile, setProfile] = useState<UserProfile>(initialProfile);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -40,7 +42,7 @@ export function SearchPanel({ profile: initialProfile }: { profile: UserProfile 
       const res = await chat({ message, profile, location });
       const data = res.data;
       if (!data) {
-        toast.show("No results — try widening your search.", "error");
+        toast.show(t("search.noResults"), "error");
         setBusy(false);
         return;
       }
@@ -51,7 +53,7 @@ export function SearchPanel({ profile: initialProfile }: { profile: UserProfile 
       router.push("/results");
     } catch (e) {
       console.error(e);
-      toast.show("Search failed. Showing demo results.", "error");
+      toast.show(t("search.failed"), "error");
       setBusy(false);
     }
   };
@@ -69,7 +71,7 @@ export function SearchPanel({ profile: initialProfile }: { profile: UserProfile 
               if (!busy) void onFind();
             }
           }}
-          placeholder="Search for food... (e.g., high protein low calorie)"
+          placeholder={t("search.placeholder")}
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -95,11 +97,9 @@ export function SearchPanel({ profile: initialProfile }: { profile: UserProfile 
             <Sparkles size={18} />
           </div>
           <div className="min-w-0">
-            <div className="font-semibold text-sm">Cheat day</div>
+            <div className="font-semibold text-sm">{t("search.cheatDay")}</div>
             <div className="text-xs text-muted-foreground">
-              {cheatDay
-                ? "Bypassing your profile — anything goes."
-                : "Ignore my profile for this search."}
+              {cheatDay ? t("search.cheatDay.on") : t("search.cheatDay.off")}
             </div>
           </div>
         </div>
@@ -126,7 +126,7 @@ export function SearchPanel({ profile: initialProfile }: { profile: UserProfile 
         onClick={onFind}
         disabled={busy}
       >
-        {busy ? "Foraging…" : "Find My Perfect Meal"}
+        {busy ? t("search.busy") : t("search.cta")}
         <ChevronRight />
       </Button>
     </div>
