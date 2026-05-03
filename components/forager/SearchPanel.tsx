@@ -2,58 +2,45 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, ChevronUp, DollarSign, Search } from "lucide-react";
+import { ChevronRight, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Pill } from "@/components/forager/Pill";
 import { useToast } from "@/components/forager/ToastProvider";
 import { chat } from "@/lib/forager-api";
-import type { GeoLocation, UserProfile } from "@/lib/forager-types";
+import { persistProfile } from "@/lib/forager-profile";
+import type { GeoLocation, ProfileMode, UserProfile } from "@/lib/forager-types";
 import { cn } from "@/lib/utils";
 
-const QUICK_FILTERS = [
-  "Nearest",
-  "Top-Rated",
-  "Late-Night",
-  "Solo Dining",
-  "Cheap",
-  "High Protein",
-  "Non-Spicy",
-];
-
-const TASTE_FILTERS = ["Non-Spicy", "Mild", "Spicy", "Sweet", "Savory", "Sour"];
-
-const DIETARY_FILTERS = [
-  "Low-Calorie",
-  "High-Protein",
-  "Vegan",
-  "Vegetarian",
-  "Gluten-Free",
-  "Keto",
-];
-
-export function SearchPanel({ profile }: { profile: UserProfile }) {
+export function SearchPanel({ profile: initialProfile }: { profile: UserProfile }) {
   const router = useRouter();
   const toast = useToast();
+  const [profile, setProfile] = useState<UserProfile>(initialProfile);
   const [query, setQuery] = useState("");
-  const [activeQuick, setActiveQuick] = useState<string[]>(["Nearest"]);
-  const [price, setPrice] = useState(29);
-  const [diet, setDiet] = useState<string[]>([]);
-  const [taste, setTaste] = useState<string[]>([]);
-  const [filtersOpen, setFiltersOpen] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  const toggle = (arr: string[], v: string, set: (a: string[]) => void) =>
-    set(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const cheatDay = profile.profileMode === "cheat_day";
+  const baseMode: Exclude<ProfileMode, "cheat_day"> = profile.authUserId
+    ? "normal"
+    : "guest";
+
+  const setCheatDay = async (v: boolean) => {
+    const next: UserProfile = {
+      ...profile,
+      profileMode: v ? "cheat_day" : baseMode,
+      updatedAt: new Date().toISOString(),
+    };
+    setProfile(next);
+    await persistProfile(next);
+  };
 
   const onFind = async () => {
     setBusy(true);
     try {
-      const message = composeMessage({ query, quick: activeQuick, diet, taste, price });
+      const message = query.trim() || "find me something good to eat right now";
       const location = await tryGeolocation();
       const res = await chat({ message, profile, location });
       const data = res.data;
       if (!data) {
-        toast.show("No results — try widening your filters.", "error");
+        toast.show("No results — try widening your search.", "error");
         setBusy(false);
         return;
       }
@@ -76,98 +63,66 @@ export function SearchPanel({ profile }: { profile: UserProfile }) {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (!busy) void onFind();
+            }
+          }}
           placeholder="Search for food... (e.g., high protein low calorie)"
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-        {QUICK_FILTERS.map((f) => (
-          <Pill
-            key={f}
-            selected={activeQuick.includes(f)}
-            onClick={() => toggle(activeQuick, f, setActiveQuick)}
+      <button
+        type="button"
+        onClick={() => setCheatDay(!cheatDay)}
+        aria-pressed={cheatDay}
+        className={cn(
+          "forager-card w-full p-4 flex items-center justify-between transition text-left",
+          cheatDay && "bg-accent-soft border-accent/40"
+        )}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-2xl shrink-0 transition",
+              cheatDay
+                ? "bg-accent text-accent-foreground"
+                : "bg-primary-soft text-primary"
+            )}
           >
-            {f}
-          </Pill>
-        ))}
-      </div>
-
-      <div className="forager-card p-5">
-        <button
-          type="button"
-          className="w-full flex items-center justify-between"
-          onClick={() => setFiltersOpen((v) => !v)}
-        >
-          <h2 className="text-base font-semibold text-primary">Filters</h2>
-          {filtersOpen ? (
-            <ChevronUp size={18} className="text-muted-foreground" />
-          ) : (
-            <ChevronDown size={18} className="text-muted-foreground" />
-          )}
-        </button>
-
-        {filtersOpen && (
-          <div className="mt-4">
-            <div className="flex items-center gap-2 mb-3">
-              <DollarSign className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Price range</span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={100}
-              step={1}
-              value={price}
-              onChange={(e) => setPrice(Number(e.target.value))}
-              className="w-full accent-[var(--primary)]"
-              aria-label="Max price"
-            />
-            <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-              <span>$10</span>
-              <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
-                Under ${price}
-              </span>
-              <span>$100</span>
-            </div>
-
-            <h3 className="mt-6 mb-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-              Dietary preferences
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {DIETARY_FILTERS.map((d) => (
-                <Pill
-                  key={d}
-                  selected={diet.includes(d)}
-                  onClick={() => toggle(diet, d, setDiet)}
-                >
-                  {d}
-                </Pill>
-              ))}
-            </div>
-
-            <h3 className="mt-6 mb-3 text-xs uppercase tracking-wider text-muted-foreground font-semibold">
-              Taste preferences
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {TASTE_FILTERS.map((t) => (
-                <Pill
-                  key={t}
-                  selected={taste.includes(t)}
-                  onClick={() => toggle(taste, t, setTaste)}
-                >
-                  {t}
-                </Pill>
-              ))}
+            <Sparkles size={18} />
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm">Cheat day</div>
+            <div className="text-xs text-muted-foreground">
+              {cheatDay
+                ? "Bypassing your profile — anything goes."
+                : "Ignore my profile for this search."}
             </div>
           </div>
-        )}
-      </div>
+        </div>
+        <span
+          className={cn(
+            "inline-flex h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors",
+            cheatDay ? "bg-accent" : "bg-muted"
+          )}
+          aria-hidden
+        >
+          <span
+            className={cn(
+              "h-5 w-5 rounded-full bg-card shadow transition-transform",
+              cheatDay ? "translate-x-5" : "translate-x-0"
+            )}
+          />
+        </span>
+      </button>
 
       <Button
         variant="cta"
         size="xl"
-        className={cn("w-full")}
+        className="w-full"
         onClick={onFind}
         disabled={busy}
       >
@@ -176,22 +131,6 @@ export function SearchPanel({ profile }: { profile: UserProfile }) {
       </Button>
     </div>
   );
-}
-
-function composeMessage(opts: {
-  query: string;
-  quick: string[];
-  diet: string[];
-  taste: string[];
-  price: number;
-}): string {
-  const parts: string[] = [];
-  if (opts.query) parts.push(opts.query);
-  if (opts.quick.length) parts.push(opts.quick.join(", ").toLowerCase());
-  if (opts.diet.length) parts.push(opts.diet.join(", ").toLowerCase());
-  if (opts.taste.length) parts.push(opts.taste.join(", ").toLowerCase());
-  parts.push(`under $${opts.price}`);
-  return parts.join(", ");
 }
 
 async function tryGeolocation(): Promise<GeoLocation | undefined> {
