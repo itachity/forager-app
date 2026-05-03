@@ -156,39 +156,48 @@ def preference_match_score(place: dict[str, Any], intent: dict[str, Any]) -> flo
 
 def macro_fit_score(intent: dict[str, Any], place: dict[str, Any]) -> float:
     """
-    Heuristic only.
+    Lightweight, non-authoritative heuristic.
 
-    The final agent/Nemotron should still decide if USDA references are actually useful.
+    Uses user intent signals and place metadata only, without assuming specific cuisines
+    or fixed food taxonomies. Final macro reasoning should be done by the agent model.
     """
     goal_text = " ".join(
         [
             str(intent.get("macro_goal") or ""),
             str(intent.get("goal") or ""),
             str(intent.get("message") or ""),
+            str(intent.get("craving") or ""),
         ]
     ).lower()
 
-    place_text = " ".join(
-        [
-            str(place.get("name") or ""),
-            str(place.get("primaryType") or ""),
-            " ".join(place.get("types") or []),
-        ]
-    ).lower()
+    place_tokens = {
+        str(place.get("name") or "").lower(),
+        str(place.get("primaryType") or "").lower(),
+        *[str(token).lower() for token in (place.get("types") or [])],
+    }
+    place_text = " ".join(token for token in place_tokens if token)
 
-    score = 0.55
+    score = 0.5
 
-    if "high protein" in goal_text or "protein" in goal_text:
-        score += 0.15
+    positive_goal_terms = ["protein", "lean", "healthy", "low calorie", "light", "under"]
+    negative_goal_terms = ["dessert", "sweet", "fried", "indulgent"]
 
-    if "low calorie" in goal_text or "healthy" in goal_text or "under" in goal_text:
-        score += 0.10
+    positive_matches = sum(1 for term in positive_goal_terms if term in goal_text)
+    negative_matches = sum(1 for term in negative_goal_terms if term in goal_text)
 
-    if any(word in place_text for word in ["grill", "bowl", "poke", "mediterranean", "mexican", "thai", "japanese"]):
-        score += 0.10
+    score += min(positive_matches * 0.05, 0.2)
+    score -= min(negative_matches * 0.05, 0.15)
 
-    if any(word in place_text for word in ["dessert", "donut", "ice cream", "bakery"]):
-        score -= 0.25
+    preferred_terms = [str(term).lower() for term in intent.get("preferred_order_terms", []) if term]
+    avoid_terms = [str(term).lower() for term in intent.get("avoid_order_terms", []) if term]
+
+    if preferred_terms:
+        preferred_hits = sum(1 for term in preferred_terms if term in place_text)
+        score += min(preferred_hits * 0.08, 0.16)
+
+    if avoid_terms:
+        avoid_hits = sum(1 for term in avoid_terms if term in place_text)
+        score -= min(avoid_hits * 0.1, 0.2)
 
     return max(0.0, min(score, 1.0))
 
