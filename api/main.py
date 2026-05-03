@@ -1,6 +1,8 @@
 from typing import Any
 
-from fastapi import FastAPI, File, UploadFile
+import os
+
+from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -9,12 +11,11 @@ from agent import ForagerAgent
 
 app = FastAPI(title="Forager API")
 
-origins = [
-    "http://localhost:3000",
-    "https://forager-app.vercel.app",
-    "https://forager-app.com",
-    "https://www.forager-app.com",
-]
+origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
+
+if not origins:
+    origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -60,7 +61,7 @@ async def chat(req: ChatRequest) -> dict[str, Any]:
 @app.post("/analyze-menu")
 async def analyze_menu(
     file: UploadFile = File(...),
-    goal: str = "healthy low-calorie high-protein meal",
+    goal: str = Form(...),
 ) -> dict[str, Any]:
     image_bytes = await file.read()
 
