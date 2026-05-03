@@ -24,7 +24,9 @@ export function RecommendationCard({
   isTopPick?: boolean;
   profile: UserProfile;
 }) {
-  const flags = intersectAllergens(profile.dietary.allergens, [rec.order]);
+  const flags = rec.order
+    ? intersectAllergens(profile.dietary.allergens, [rec.order])
+    : [];
 
   return (
     <div
