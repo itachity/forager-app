@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Languages } from "lucide-react";
-import { ForagerLogo } from "@/components/forager/ForagerLogo";
+import { AppHeader } from "@/components/forager/AppHeader";
 import { SearchPanel } from "@/components/forager/SearchPanel";
 import { ScanEntryCard } from "@/components/forager/ScanEntryCard";
 import { BottomNav } from "@/components/forager/BottomNav";
@@ -32,13 +32,11 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen pb-32">
-      <div className="max-w-xl mx-auto px-5 pt-6">
-        <div className="flex flex-col items-center text-center mb-5">
-          <ForagerLogo size="lg" />
-          <p className="text-sm text-muted-foreground mt-1">
-            Discover your next food adventure
-          </p>
-        </div>
+      <AppHeader />
+      <div className="max-w-xl mx-auto px-5 pt-2">
+        <p className="text-sm text-muted-foreground text-center mb-5">
+          Discover your next food adventure
+        </p>
 
         <SearchPanel profile={profile} />
 

@@ -112,7 +112,7 @@ export async function analyzeMenu(
 
 function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
   const recs = Array.isArray(raw.recommendations) ? (raw.recommendations as Record<string, unknown>[]) : [];
-  const recommendations: ChatRecommendation[] = recs.map((r, idx) => {
+  const recommendations: ChatRecommendation[] = recs.slice(0, 3).map((r, idx) => {
     const macros = (r.estimated_macros as Record<string, unknown> | undefined) ?? undefined;
     return {
       rank: numOr(r.rank, idx + 1),
@@ -129,6 +129,14 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
       tradeoffs: strOrUndefined(r.tradeoffs),
       sources_used: Array.isArray(r.sources_used) ? (r.sources_used as string[]) : [],
       google_maps_url: strOrUndefined(r.google_maps_url),
+      price: strOrUndefined(r.price) ?? priceLabelFromLevel(r.price_level ?? r.priceLevel),
+      price_usd:
+        typeof r.price_usd === "number" && Number.isFinite(r.price_usd)
+          ? r.price_usd
+          : undefined,
+      review_quotes: Array.isArray(r.review_quotes)
+        ? (r.review_quotes as string[]).slice(0, 2)
+        : undefined,
     };
   });
   return {
@@ -137,6 +145,25 @@ function normalizeChatResponse(raw: Record<string, unknown>): ChatResponse {
     tool_trace: Array.isArray(raw.tool_trace) ? (raw.tool_trace as ToolTraceEntry[]) : undefined,
     limitations: Array.isArray(raw.limitations) ? (raw.limitations as string[]) : undefined,
   };
+}
+
+/** Maps Google Places `PRICE_LEVEL_*` strings or 0..4 ints to "$"/"$$"/etc. */
+function priceLabelFromLevel(level: unknown): string | undefined {
+  if (typeof level === "number") {
+    if (level <= 0) return undefined;
+    return "$".repeat(Math.min(level, 4));
+  }
+  if (typeof level === "string") {
+    switch (level) {
+      case "PRICE_LEVEL_FREE": return undefined;
+      case "PRICE_LEVEL_INEXPENSIVE": return "$";
+      case "PRICE_LEVEL_MODERATE": return "$$";
+      case "PRICE_LEVEL_EXPENSIVE": return "$$$";
+      case "PRICE_LEVEL_VERY_EXPENSIVE": return "$$$$";
+      default: return undefined;
+    }
+  }
+  return undefined;
 }
 
 function normalizeFoodResponse(raw: Record<string, unknown>): AnalyzeFoodResponse {

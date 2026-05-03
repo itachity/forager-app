@@ -100,6 +100,13 @@ export type ChatRecommendation = {
   tradeoffs?: string;
   sources_used: string[];
   google_maps_url?: string;
+  /** Display label like "$" / "$$" / "$$$" — populated when backend
+   * surfaces Google Places `priceLevel`. */
+  price?: string;
+  /** Estimated meal price in USD when known. */
+  price_usd?: number;
+  /** Short user-review quotes pulled from Google Places (max ~2). Optional. */
+  review_quotes?: string[];
 };
 
 export type ToolTraceEntry = {

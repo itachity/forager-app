@@ -38,6 +38,12 @@ export const DEMO_CHAT: ChatResponse = {
       tradeoffs: "Skip the gravy; mac side adds ~250 kcal.",
       sources_used: ["google_places", "usda_fooddata_central"],
       google_maps_url: "https://maps.google.com/?q=Local+Boys+Grindz+Corvallis",
+      price: "$$",
+      price_usd: 13,
+      review_quotes: [
+        "Their grilled chicken plate is the best lunch deal in town.",
+        "Big portions, fresh ingredients — packed at noon for a reason.",
+      ],
     },
     {
       rank: 2,
@@ -54,6 +60,11 @@ export const DEMO_CHAT: ChatResponse = {
       tradeoffs: "Sodium is high; skip the hoisin if you're sensitive.",
       sources_used: ["google_places", "usda_fooddata_central"],
       google_maps_url: "https://maps.google.com/?q=Pho+Van+Corvallis",
+      price: "$",
+      price_usd: 11,
+      review_quotes: [
+        "Comforting, clean broth — perfect after a cold morning class.",
+      ],
     },
     {
       rank: 3,
@@ -70,6 +81,11 @@ export const DEMO_CHAT: ChatResponse = {
       tradeoffs: "Pricier than the others; portion size varies by season.",
       sources_used: ["google_places"],
       google_maps_url: "https://maps.google.com/?q=Block+15+Restaurant+Corvallis",
+      price: "$$$",
+      price_usd: 27,
+      review_quotes: [
+        "The trout is plated beautifully and never overcooked.",
+      ],
     },
   ],
   tool_trace: [

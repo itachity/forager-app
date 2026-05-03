@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ScanHeader } from "@/components/forager/ScanHeader";
+import { AppHeader } from "@/components/forager/AppHeader";
 import { ScanCapture } from "@/components/forager/ScanCapture";
+import { ScanModeToggle } from "@/components/forager/ScanModeToggle";
 import { BottomNav } from "@/components/forager/BottomNav";
 import { useToast } from "@/components/forager/ToastProvider";
 import { analyzeFood } from "@/lib/forager-api";
@@ -58,7 +59,10 @@ export default function ScanFoodPage() {
 
   return (
     <>
-      <ScanHeader />
+      <AppHeader backHref="/home" />
+      <div className="max-w-xl mx-auto px-5 pt-2 pb-2">
+        <ScanModeToggle active="food" />
+      </div>
       <ScanCapture
         eyebrow="Scan"
         heading="Snap your meal"

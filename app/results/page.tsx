@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { ForagerLogo } from "@/components/forager/ForagerLogo";
-import { FauxMap } from "@/components/forager/FauxMap";
+import { AppHeader } from "@/components/forager/AppHeader";
+import { ResultsMap } from "@/components/forager/ResultsMap";
 import { RecommendationCard } from "@/components/forager/RecommendationCard";
 import { ToolTracePanel } from "@/components/forager/ToolTracePanel";
 import { SafetyNote } from "@/components/forager/SafetyNote";
@@ -52,24 +50,12 @@ export default function ResultsPage() {
 
   return (
     <main className="min-h-screen pb-32">
-      <div className="px-5 pt-4 pb-3 sticky top-0 z-10 bg-background/95 backdrop-blur">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
-          <Link
-            href="/home"
-            aria-label="Back to search"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary hover:bg-muted transition"
-          >
-            <ArrowLeft size={18} />
-          </Link>
-          <ForagerLogo size="sm" />
-          <div className="w-9" />
-        </div>
-      </div>
+      <AppHeader backHref="/home" />
 
-      <div className="max-w-xl mx-auto px-5 pt-4 space-y-4">
+      <div className="max-w-xl mx-auto px-5 pt-2 space-y-4">
         {demo && <DemoBanner />}
 
-        <FauxMap recommendations={data.recommendations} />
+        <ResultsMap recommendations={data.recommendations} />
 
         {data.answer && (
           <p className="text-sm text-muted-foreground leading-relaxed">

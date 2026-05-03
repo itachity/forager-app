@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ScanHeader } from "@/components/forager/ScanHeader";
+import { AppHeader } from "@/components/forager/AppHeader";
 import { ScanMenuResult } from "@/components/forager/ScanMenuResult";
 import { DemoBanner } from "@/components/forager/DemoBanner";
 import { BottomNav } from "@/components/forager/BottomNav";
@@ -51,7 +51,7 @@ export default function ScanMenuResultPage() {
 
   return (
     <>
-      <ScanHeader backHref="/scan/menu" />
+      <AppHeader backHref="/scan/menu" />
       {demo && (
         <div className="max-w-xl mx-auto px-5 pt-2">
           <DemoBanner />

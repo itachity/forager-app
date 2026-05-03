@@ -8,15 +8,21 @@ export type DiscoverItem = {
   id: string;
   name: string;
   cuisine: string;
+  address: string;
+  /** Used to compute live distance from the user's geolocation. */
+  lat?: number;
+  lng?: number;
   imageUrl: string;
   rating: number;
   reasonChip: string;
   tags: string[];
   priceLabel: string;
-  distance: string;
+  /** Distance label (computed at render time when geo is granted). */
+  distance?: string;
 };
 
 export function DiscoverCard({ item }: { item: DiscoverItem }) {
+  const mapsUrl = `https://www.google.com/maps?q=${encodeURIComponent(item.address)}`;
   return (
     <div className="forager-card overflow-hidden flex flex-col">
       <div className="relative aspect-[4/3] bg-muted">
@@ -37,7 +43,17 @@ export function DiscoverCard({ item }: { item: DiscoverItem }) {
       </div>
       <div className="p-3 flex-1 flex flex-col">
         <h3 className="font-semibold text-sm leading-tight truncate">{item.name}</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">{item.cuisine}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 truncate">{item.cuisine}</p>
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 text-[11px] text-muted-foreground inline-flex items-start gap-1 hover:text-primary transition"
+          title={item.address}
+        >
+          <MapPin size={11} className="mt-0.5 shrink-0" />
+          <span className="line-clamp-2">{item.address}</span>
+        </a>
         <div className="mt-2 flex flex-wrap gap-1">
           {item.tags.slice(0, 2).map((t) => (
             <span
@@ -52,9 +68,11 @@ export function DiscoverCard({ item }: { item: DiscoverItem }) {
         </div>
         <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
           <span>{item.priceLabel}</span>
-          <span className="inline-flex items-center gap-1">
-            <MapPin size={11} /> {item.distance}
-          </span>
+          {item.distance && (
+            <span className="inline-flex items-center gap-1">
+              <MapPin size={11} /> {item.distance}
+            </span>
+          )}
         </div>
         <Button variant="cta" size="sm" className="mt-3 w-full rounded-xl">
           Let&rsquo;s Eat This! <ChevronRight />

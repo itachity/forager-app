@@ -9,7 +9,6 @@ import { ForagerLogo } from "@/components/forager/ForagerLogo";
 import { useToast } from "@/components/forager/ToastProvider";
 import { signInWithGoogle, supabaseAvailable } from "@/lib/forager-supabase";
 import { defaultProfile, persistProfile } from "@/lib/forager-profile";
-import { FOOD_IMAGES } from "@/lib/forager-fallback";
 
 export default function WelcomePage() {
   const router = useRouter();
@@ -37,46 +36,31 @@ export default function WelcomePage() {
 
   return (
     <main className="min-h-screen flex flex-col">
-      <div className="relative h-[44vh] md:h-[52vh] w-full overflow-hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={FOOD_IMAGES.hero}
-          alt="A warm table of colorful, fresh dishes"
-          className="absolute inset-0 h-full w-full object-cover"
-          loading="eager"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-background" />
-        <div className="absolute top-5 left-5">
-          <ForagerLogo size="md" />
+      <div className="px-6 pt-10 max-w-xl mx-auto w-full flex-1 flex flex-col">
+        <div className="flex justify-center mb-8">
+          <ForagerLogo size="lg" />
         </div>
-        <div className="absolute bottom-6 right-5 max-w-[16rem] rounded-2xl bg-card/95 backdrop-blur p-3 shadow-lg border border-border/60">
-          <div className="text-[10px] uppercase tracking-wider text-accent font-semibold">
-            Today&rsquo;s pick
-          </div>
-          <div className="text-sm font-semibold mt-0.5">Green Harvest Bowl</div>
-          <div className="text-xs text-muted-foreground">0.3 mi · Local Boys Grindz</div>
-        </div>
-      </div>
 
-      <div className="px-6 -mt-6 relative z-10 max-w-xl mx-auto w-full">
-        <div className="flex items-start gap-3 mb-2">
+        <div className="flex justify-center mb-6">
           <Image
             src="/icon.png"
             alt="Forager app icon"
-            width={56}
-            height={56}
-            className="rounded-2xl shadow-md shrink-0"
+            width={120}
+            height={120}
+            className="rounded-3xl shadow-lg"
+            priority
           />
-          <h1 className="text-3xl font-semibold tracking-tight leading-tight">
-            Discover your next food adventure.
-          </h1>
         </div>
-        <p className="mt-3 text-muted-foreground leading-relaxed">
+
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-center leading-tight">
+          Discover your next food adventure.
+        </h1>
+        <p className="mt-3 text-muted-foreground leading-relaxed text-center">
           Hidden food gems tailored to your taste, goals, and mood — from cozy late-night
           bites to your next high-protein bowl.
         </p>
 
-        <div className="mt-7 space-y-3">
+        <div className="mt-8 space-y-3">
           <Button
             variant="cta"
             size="xl"

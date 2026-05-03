@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Quote } from "lucide-react";
 import type { ChatRecommendation, UserProfile } from "@/lib/forager-types";
 import { MacroRangeBadge } from "./MacroRangeBadge";
 import { ConfidenceBadge } from "./ConfidenceBadge";
@@ -41,6 +41,15 @@ export function RecommendationCard({
             </h3>
           </div>
           <p className="text-xs text-muted-foreground mt-1">{rec.address}</p>
+          {(rec.price || typeof rec.price_usd === "number") && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {rec.price && <span className="font-semibold text-foreground">{rec.price}</span>}
+              {rec.price && typeof rec.price_usd === "number" && " · "}
+              {typeof rec.price_usd === "number" && (
+                <span>~${rec.price_usd}</span>
+              )}
+            </p>
+          )}
         </div>
         {typeof rec.score === "number" && rec.score > 0 && (
           <div className="rounded-full bg-primary-soft text-primary px-2.5 py-1 text-xs font-bold shrink-0">
@@ -85,6 +94,21 @@ export function RecommendationCard({
             Why
           </div>
           <p className="text-sm mt-1 leading-relaxed">{rec.why}</p>
+        </div>
+      )}
+
+      {rec.review_quotes && rec.review_quotes.length > 0 && (
+        <div className="mt-3 rounded-2xl bg-secondary/60 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+            <Quote size={11} /> What people say on Google
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {rec.review_quotes.map((q, i) => (
+              <li key={i} className="text-sm italic leading-relaxed">
+                &ldquo;{q}&rdquo;
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
