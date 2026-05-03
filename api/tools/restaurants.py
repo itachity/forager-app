@@ -90,6 +90,32 @@ def distance_score(distance_miles: float | None, radius_meters: float) -> float:
 
     return max(0.0, min(1.0 - (distance_miles / radius_miles), 1.0))
 
+def hard_filter_by_distance(
+    places: list[dict[str, Any]],
+    radius_meters: float,
+) -> list[dict[str, Any]]:
+    """
+    Google Text Search uses locationBias, not a hard radius.
+
+    This removes places outside the user radius after we compute distance.
+    """
+    radius_miles = radius_meters / 1609.344
+
+    filtered = []
+
+    for place in places:
+        distance = place.get("distanceMiles")
+
+        if distance is None:
+            # Keep unknown-distance places, but they will score lower.
+            filtered.append(place)
+            continue
+
+        if distance <= radius_miles:
+            filtered.append(place)
+
+    return filtered
+
 
 def price_score(price_level: str | None, budget: str | None) -> float:
     if not budget:
@@ -203,13 +229,27 @@ def macro_fit_score(intent: dict[str, Any], place: dict[str, Any]) -> float:
 
 
 def community_score_for_place(place: dict[str, Any], community_by_name: dict[str, Any]) -> float:
-    _ = community_by_name
-    rating_signal = bayesian_rating_score(
-        place.get("rating"),
-        place.get("reviewCount"),
-    )
-    default_community_floor = 0.55
-    return max(default_community_floor, rating_signal)
+    """
+    Real community sentiment should come from Reddit/local sources.
+
+    If no community signal exists, return neutral 0.5.
+    Do NOT fake community sentiment from Google rating.
+    """
+    if not community_by_name:
+        return 0.5
+
+    place_name = str(place.get("name") or "").lower()
+
+    for known_name, signal in community_by_name.items():
+        known_name_lower = str(known_name).lower()
+
+        if known_name_lower in place_name or place_name in known_name_lower:
+            try:
+                return max(0.0, min(float(signal.get("score", 0.5)), 1.0))
+            except (TypeError, ValueError):
+                return 0.5
+
+    return 0.5
 
 
 def compute_total_score(
@@ -389,9 +429,32 @@ def search_and_score_restaurants(
         max_results=max_results,
     )
 
+    return score_existing_restaurants(
+        places=places,
+        intent=intent,
+        community_by_name=community_by_name or {},
+        radius_meters=radius_meters,
+    )
+
+def score_existing_restaurants(
+    places: list[dict[str, Any]],
+    intent: dict[str, Any],
+    community_by_name: dict[str, Any] | None = None,
+    radius_meters: float = 5000,
+) -> list[dict[str, Any]]:
+    """
+    Re-score already fetched Google Places results without calling Google again.
+
+    Use this after Reddit/community data becomes available.
+    """
+    filtered_places = hard_filter_by_distance(
+        places=places,
+        radius_meters=radius_meters,
+    )
+
     scored_places = []
 
-    for place in places:
+    for place in filtered_places:
         place["score"] = compute_total_score(
             place=place,
             intent=intent,
@@ -401,5 +464,4 @@ def search_and_score_restaurants(
         scored_places.append(place)
 
     scored_places.sort(key=lambda item: item["score"]["total"], reverse=True)
-
     return scored_places

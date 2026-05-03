@@ -10,7 +10,7 @@ from openai import OpenAI
 
 from tools.macros import get_macro_references
 from tools.menus import analyze_menu_image_bytes
-from tools.restaurants import search_and_score_restaurants
+from tools.restaurants import search_and_score_restaurants, score_existing_restaurants
 
 
 load_dotenv()
@@ -138,55 +138,77 @@ class ForagerAgent:
         )
 
         restaurants: list[dict[str, Any]] = []
-        community_signal: dict[str, Any] = {"community_by_name": {}}
+
+        # Reddit/local community is not approved yet, so keep this honest and neutral.
+        community_signal: dict[str, Any] = {
+            "status": "unavailable",
+            "source": None,
+            "community_by_name": {},
+            "note": (
+                "Community sentiment is neutral because Reddit/API community search "
+                "is not enabled yet."
+            ),
+        }
+
+        tool_trace.append(
+            {
+                "tool": "community_sentiment",
+                "status": "skipped",
+                "reason": "Reddit API approval is pending; using neutral community score.",
+            }
+        )
+
+        radius_meters = float(intent.get("radius_meters") or 5000)
 
         if resolved_location.get("lat") is not None and resolved_location.get("lng") is not None:
             lat = float(resolved_location["lat"])
             lng = float(resolved_location["lng"])
 
-            # First pass: Google restaurants with neutral community signal.
-            restaurants = search_and_score_restaurants(
-                intent=intent,
-                lat=lat,
-                lng=lng,
-                community_by_name={},
-                radius_meters=float(intent.get("radius_meters") or 5000),
-                max_results=20,
-            )
+            try:
+                restaurants = search_and_score_restaurants(
+                    intent=intent,
+                    lat=lat,
+                    lng=lng,
+                    community_by_name=community_signal.get("community_by_name", {}),
+                    radius_meters=radius_meters,
+                    max_results=20,
+                )
 
-            tool_trace.append(
-                {
-                    "tool": "google_places_restaurant_search",
-                    "status": "ok",
-                    "count": len(restaurants),
-                }
-            )
+                tool_trace.append(
+                    {
+                        "tool": "google_places_restaurant_search",
+                        "status": "ok",
+                        "count": len(restaurants),
+                        "radius_meters": radius_meters,
+                    }
+                )
 
-            # Second pass: rescore with current restaurant data.
-            restaurants = search_and_score_restaurants(
-                intent=intent,
-                lat=lat,
-                lng=lng,
-                community_by_name=community_signal.get("community_by_name", {}),
-                radius_meters=float(intent.get("radius_meters") or 5000),
-                max_results=20,
-            )
+                tool_trace.append(
+                    {
+                        "tool": "forager_weighted_ranking",
+                        "status": "ok",
+                        "weights": {
+                            "restaurant_rating": "20%",
+                            "community_sentiment": "15% neutral until Reddit/community data is enabled",
+                            "distance": "10%",
+                            "price": "10%",
+                            "macro_fit": "10%",
+                            "preference_match": "15%",
+                            "availability": "20%",
+                        },
+                    }
+                )
 
-            tool_trace.append(
-                {
-                    "tool": "forager_weighted_ranking",
-                    "status": "ok",
-                    "weights": {
-                        "restaurant_rating": "20%",
-                        "community_sentiment": "15%",
-                        "distance": "10%",
-                        "price": "10%",
-                        "macro_fit": "10%",
-                        "preference_match": "15%",
-                        "availability": "20%",
-                    },
-                }
-            )
+            except Exception as exc:
+                restaurants = []
+
+                tool_trace.append(
+                    {
+                        "tool": "google_places_restaurant_search",
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
 
         else:
             tool_trace.append(
@@ -197,15 +219,27 @@ class ForagerAgent:
                 }
             )
 
-        macro_references = get_macro_references(intent=intent, page_size=3)
+        try:
+            macro_references = get_macro_references(intent=intent, page_size=3)
 
-        tool_trace.append(
-            {
-                "tool": "usda_fooddata_central",
-                "status": "ok",
-                "queries": [item.get("query") for item in macro_references],
-            }
-        )
+            tool_trace.append(
+                {
+                    "tool": "usda_fooddata_central",
+                    "status": "ok",
+                    "queries": [item.get("query") for item in macro_references],
+                }
+            )
+
+        except Exception as exc:
+            macro_references = []
+
+            tool_trace.append(
+                {
+                    "tool": "usda_fooddata_central",
+                    "status": "error",
+                    "error": str(exc),
+                }
+            )
 
         final = self.synthesize_final_answer(
             message=message,
@@ -483,7 +517,7 @@ class ForagerAgent:
                 "role": "system",
                 "content": (
                     "You are Forager, an AI food decision assistant. "
-                    "You compare restaurant options, community sentiment default, price, distance, availability, "
+                    "You compare restaurant options, price, distance, availability, user preferences, "
                     "user preferences, and USDA macro references.\n\n"
                     "Critical rules:\n"
                     "1. USDA data is only reference data. It may lack portion size or not match restaurant food.\n"
@@ -493,7 +527,10 @@ class ForagerAgent:
                     "5. Clearly label confidence: high, medium, medium-low, or low.\n"
                     "6. Do not give medical advice.\n"
                     "7. If allergies are present, warn the user to verify with the restaurant.\n"
-                    "8. Community sentiment is a default heuristic, not scraped from social media.\n\n"
+                    "8. Do not claim community sentiment, Reddit support, or local recommendations unless community_signal.status is 'ok'. "
+                    "If community_signal.status is 'unavailable' or 'skipped', say community signal was not available.\n\n"
+                    "9. sources_used must list real sources such as Google Places, USDA FoodData Central, Nemotron, and Forager scoring. "
+                    "Do not list scoring factors like distance, price, or community_sentiment as sources.\n\n"
                     "Return JSON only. No markdown.\n\n"
                     "Schema:\n"
                     "{\n"
@@ -623,7 +660,6 @@ class ForagerAgent:
             "macro_references": macro_references,
             "limitations": [
                 "USDA values are approximate references, not exact restaurant macros.",
-                "Reddit is currently using a public website JSON fallback while API approval is pending.",
                 "The user should verify allergens, ingredients, and portion sizes with the restaurant.",
             ],
         }
