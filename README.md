@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Forager
+
+Forager helps you discover hidden food gems tailored to your taste, goals, and mood. Snap a meal or translate a menu in any language, then chat with the agent for recommendations near you.
+
+The repo contains two pieces:
+
+- A **Next.js 16** frontend (App Router, React 19, Tailwind v4, shadcn/Radix UI, `@vis.gl/react-google-maps`, Supabase auth).
+- A **FastAPI** backend in `api/` that wraps an NVIDIA Nemotron-powered agent and talks to Google Maps + USDA.
 
 ## Getting Started
 
-First, run the development server:
+### Frontend
+
+Install dependencies and run the dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser. The entry point is `app/page.tsx` and the layout lives in `app/layout.tsx`. Hot reload is on by default.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Backend
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The frontend talks to the FastAPI service at `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8000`). To run it:
 
-## Learn More
+```bash
+cd api
+python -m venv .venv
+.venv\Scripts\activate         # PowerShell: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+```
 
-To learn more about Next.js, take a look at the following resources:
+If the backend is unreachable, the frontend falls back to bundled demo data so the UI still works end-to-end.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Environment variables
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Copy `.env.example` to `.env.local` (frontend) and `api/.env` (backend) and fill in the keys:
 
-## Deploy on Vercel
+- `NEXT_PUBLIC_API_URL` — backend URL used by the browser.
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — required for Google sign-in. Without them, the landing page surfaces a toast and only "Continue as Guest" works.
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` — enables the interactive results map; when unset, the UI falls back to a lightweight iframe map.
+- Backend: `NVIDIA_API_KEY`, `GOOGLE_MAPS_API_KEY`, `USDA_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, optional `NEMOTRON_MODEL`, and `DEFAULT_LAT` / `DEFAULT_LNG` / `DEFAULT_CITY` / `DEFAULT_COUNTRY` for the demo location.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `app/` — App Router pages: landing, onboarding, home, discover, chat, profile, scan (food + menu), and results.
+- `components/` — UI primitives (shadcn-style) plus Forager-specific components.
+- `lib/` — client helpers: API client (`forager-api.ts`), Supabase wiring, profile/i18n state, image resizing, fallbacks.
+- `api/` — FastAPI app (`main.py`) and the agent implementation (`agent.py`).
+
+## Notes
+
+- This project pins Next.js 16 and React 19. Their APIs and conventions differ from earlier versions — check the docs in `node_modules/next/dist/docs/` before adding code that relies on Next.js behavior.
+- Fonts are loaded with `next/font/google` (Geist Sans + Geist Mono) in `app/layout.tsx`.
+- The branch `mj-dev` is the active development branch; `main` is the integration branch.
