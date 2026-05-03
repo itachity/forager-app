@@ -10,6 +10,7 @@ api/.env
 api/.venv/
 __pycache__/
 *.pyc
+.venv
 
 # dependencies
 /node_modules
