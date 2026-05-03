@@ -258,6 +258,11 @@ function normalizeMenuResponse(raw: Record<string, unknown>, profile: UserProfil
     const translatedName = strOr(c.dish_english, strOr(c.dish_original, "Unknown dish"));
     return {
       originalName: strOr(c.dish_original, ""),
+      originalNameRomanized:
+        strOrUndefined(c.dish_romanized) ??
+        strOrUndefined(c.dish_romaji) ??
+        strOrUndefined(c.dish_pinyin) ??
+        strOrUndefined(c.dish_romanji),
       translatedName,
       description: strOr(c.reason, ""),
       matchScore: clamp01to10(numOr(c.goal_fit_score, 50) / 10),
@@ -272,11 +277,22 @@ function normalizeMenuResponse(raw: Record<string, unknown>, profile: UserProfil
         carbRisk: strOrUndefined(c.carb_risk),
         fatRisk: strOrUndefined(c.fat_risk),
       },
+      estimatedMacros: {
+        calories: strOrUndefined(c.estimated_calories) ?? strOrUndefined((c.estimated_macros as Record<string, unknown> | undefined)?.calories),
+        protein: strOrUndefined(c.estimated_protein) ?? strOrUndefined((c.estimated_macros as Record<string, unknown> | undefined)?.protein),
+        carbs: strOrUndefined(c.estimated_carbs) ?? strOrUndefined((c.estimated_macros as Record<string, unknown> | undefined)?.carbs),
+        fat: strOrUndefined(c.estimated_fat) ?? strOrUndefined((c.estimated_macros as Record<string, unknown> | undefined)?.fat),
+      },
     };
   });
 
   const prose = strOrUndefined(raw.final_recommendation);
-  const overallCulturalNorms = extractBullets(prose ?? "", 4);
+  const culturalFromContext = [
+    ...safeStringList(ctx.local_etiquette),
+    ...safeStringList(ctx.cultural_norms),
+    ...safeStringList(ctx.etiquette),
+  ];
+  const overallCulturalNorms = culturalFromContext.length > 0 ? culturalFromContext.slice(0, 4) : extractBullets(prose ?? "", 4);
 
   return {
     status: strOrUndefined(raw.status),
@@ -360,4 +376,12 @@ async function safeText(r: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+
+function safeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return (value as unknown[])
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean);
 }

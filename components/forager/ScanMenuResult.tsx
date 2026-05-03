@@ -40,6 +40,7 @@ function localOrderLine(language: string, dishName: string) {
   return `I'd like to order this: ${dishName}`;
 }
 
+
 export function ScanMenuResult({
   data,
   profile,
@@ -136,9 +137,16 @@ export function ScanMenuResult({
                       <p className="font-semibold truncate">{item.translatedName}</p>
                     </div>
                     {item.originalName && (
-                      <p className="text-xs text-muted-foreground italic mt-1">
-                        {item.originalName}
-                      </p>
+                      <>
+                        <p className="text-xs text-muted-foreground italic mt-1">
+                          {item.originalName}
+                        </p>
+                        {item.originalNameRomanized && item.originalNameRomanized !== item.originalName && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {item.originalNameRomanized}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-accent shrink-0">
@@ -198,9 +206,16 @@ export function ScanMenuResult({
                       </p>
                       <p className="text-sm mt-1 font-medium">&ldquo;{item.phraseToOrder}&rdquo;</p>
                       {item.originalName && (
-                        <p className="text-xs mt-1 text-muted-foreground">
-                          {localOrderLine(data.detectedLanguage, item.originalName)}
-                        </p>
+                        <>
+                          <p className="text-xs mt-1 text-muted-foreground">
+                            {localOrderLine(data.detectedLanguage, item.originalName)}
+                          </p>
+                          {item.originalNameRomanized && item.originalNameRomanized !== item.originalName && (
+                            <p className="text-[11px] mt-0.5 text-muted-foreground">
+                              {item.originalNameRomanized}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
