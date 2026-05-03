@@ -9,21 +9,23 @@ import { BottomNav } from "@/components/forager/BottomNav";
 import { useToast } from "@/components/forager/ToastProvider";
 import { analyzeMenu } from "@/lib/forager-api";
 import { loadProfileLocal } from "@/lib/forager-profile";
+import { useT } from "@/lib/forager-i18n-context";
 import type { UserProfile } from "@/lib/forager-types";
 
 export default function ScanMenuPage() {
   const router = useRouter();
   const toast = useToast();
-  const [profile] = useState<UserProfile | null>(() =>
-    typeof window === "undefined" ? null : loadProfileLocal()
-  );
+  const { t } = useT();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !profile) {
-      router.replace("/onboarding");
-    }
-  }, [profile, router]);
+    const p = loadProfileLocal();
+    if (!p) router.replace("/onboarding");
+    else setProfile(p);
+    setMounted(true);
+  }, [router]);
 
   const onSubmit = async (file: File) => {
     if (!profile) return;
@@ -33,7 +35,7 @@ export default function ScanMenuPage() {
       const res = await analyzeMenu(file, profile);
       const data = res.data;
       if (!data) {
-        toast.show("Couldn't translate this menu.", "error");
+        toast.show(t("scan.menu.errorAnalyze"), "error");
         setBusy(false);
         return;
       }
@@ -44,17 +46,13 @@ export default function ScanMenuPage() {
       router.push("/scan/menu/result");
     } catch (e) {
       console.error(e);
-      toast.show("Failed to translate. Showing demo data.", "error");
+      toast.show(t("scan.menu.errorFailed"), "error");
       setBusy(false);
     }
   };
 
-  if (!profile) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Loading…
-      </main>
-    );
+  if (!mounted || !profile) {
+    return <main className="min-h-screen" suppressHydrationWarning />;
   }
 
   return (
@@ -64,15 +62,15 @@ export default function ScanMenuPage() {
         <ScanModeToggle active="menu" />
       </div>
       <ScanCapture
-        eyebrow="Scan"
-        heading="Translate a menu"
-        subtitle="We'll translate the menu, flag your allergens, and rank dishes for you — plus phrases for the server."
-        helperPrimary="Take or upload a photo"
-        helperSecondary="Get the whole menu in frame, even if it's blurry — Forager will do its best."
+        eyebrow={t("scan.menu.eyebrow")}
+        heading={t("scan.menu.heading")}
+        subtitle={t("scan.menu.subtitle")}
+        helperPrimary={t("scan.menu.helperPrimary")}
+        helperSecondary={t("scan.menu.helperSecondary")}
         onSubmit={onSubmit}
         busy={busy}
-        loadingMessage="Translating & ranking dishes…"
-        loadingDetail="Reading the menu and learning the cuisine's etiquette."
+        loadingMessage={t("scan.menu.loading")}
+        loadingDetail={t("scan.menu.loadingDetail")}
       />
       <BottomNav />
     </>

@@ -9,21 +9,23 @@ import { BottomNav } from "@/components/forager/BottomNav";
 import { useToast } from "@/components/forager/ToastProvider";
 import { analyzeFood } from "@/lib/forager-api";
 import { loadProfileLocal } from "@/lib/forager-profile";
+import { useT } from "@/lib/forager-i18n-context";
 import type { UserProfile } from "@/lib/forager-types";
 
 export default function ScanFoodPage() {
   const router = useRouter();
   const toast = useToast();
-  const [profile] = useState<UserProfile | null>(() =>
-    typeof window === "undefined" ? null : loadProfileLocal()
-  );
+  const { t } = useT();
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !profile) {
-      router.replace("/onboarding");
-    }
-  }, [profile, router]);
+    const p = loadProfileLocal();
+    if (!p) router.replace("/onboarding");
+    else setProfile(p);
+    setMounted(true);
+  }, [router]);
 
   const onSubmit = async (file: File) => {
     if (!profile) return;
@@ -33,7 +35,7 @@ export default function ScanFoodPage() {
       const res = await analyzeFood(file, profile);
       const data = res.data;
       if (!data) {
-        toast.show("Couldn't analyze this image.", "error");
+        toast.show(t("scan.food.errorAnalyze"), "error");
         setBusy(false);
         return;
       }
@@ -44,17 +46,13 @@ export default function ScanFoodPage() {
       router.push("/scan/food/result");
     } catch (e) {
       console.error(e);
-      toast.show("Failed to analyze. Showing demo data.", "error");
+      toast.show(t("scan.food.errorFailed"), "error");
       setBusy(false);
     }
   };
 
-  if (!profile) {
-    return (
-      <main className="min-h-screen flex items-center justify-center text-muted-foreground">
-        Loading…
-      </main>
-    );
+  if (!mounted || !profile) {
+    return <main className="min-h-screen" suppressHydrationWarning />;
   }
 
   return (
@@ -64,15 +62,15 @@ export default function ScanFoodPage() {
         <ScanModeToggle active="food" />
       </div>
       <ScanCapture
-        eyebrow="Scan"
-        heading="Snap your meal"
-        subtitle="We'll identify the dish, estimate macros, and suggest how to log it."
-        helperPrimary="Take or upload a photo"
-        helperSecondary="Best results with good lighting and the whole plate visible."
+        eyebrow={t("scan.food.eyebrow")}
+        heading={t("scan.food.heading")}
+        subtitle={t("scan.food.subtitle")}
+        helperPrimary={t("scan.food.helperPrimary")}
+        helperSecondary={t("scan.food.helperSecondary")}
         onSubmit={onSubmit}
         busy={busy}
-        loadingMessage="Identifying your meal…"
-        loadingDetail="Naming ingredients and estimating macros."
+        loadingMessage={t("scan.food.loading")}
+        loadingDetail={t("scan.food.loadingDetail")}
       />
       <BottomNav />
     </>

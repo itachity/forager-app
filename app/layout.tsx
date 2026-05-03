@@ -35,7 +35,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
       style={{ ["--font-sans" as string]: "var(--font-geist-sans)" }}
     >
-      <body className="min-h-screen bg-background text-foreground">
+      <body
+        className="min-h-screen bg-background text-foreground"
+        suppressHydrationWarning
+      >
         <I18nProvider>
           <ToastProvider>{children}</ToastProvider>
         </I18nProvider>

@@ -3,14 +3,26 @@
 import Link from "next/link";
 import { Camera, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/forager-i18n-context";
 
 type Mode = "food" | "menu";
 
 export function ScanModeToggle({ active }: { active: Mode }) {
+  const { t } = useT();
   return (
     <div className="forager-card p-1 inline-flex w-full max-w-sm mx-auto">
-      <ModeButton href="/scan/food" active={active === "food"} label="Snap meal" Icon={Camera} />
-      <ModeButton href="/scan/menu" active={active === "menu"} label="Translate menu" Icon={Languages} />
+      <ModeButton
+        href="/scan/food"
+        active={active === "food"}
+        label={t("scan.toggle.snapMeal")}
+        Icon={Camera}
+      />
+      <ModeButton
+        href="/scan/menu"
+        active={active === "menu"}
+        label={t("scan.toggle.translateMenu")}
+        Icon={Languages}
+      />
     </div>
   );
 }

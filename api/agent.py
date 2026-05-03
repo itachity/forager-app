@@ -1205,7 +1205,8 @@ class ForagerAgent:
             tool_trace.append(
                 {
                     "tool": "nemotron_grounding_retry",
-                    "status": "error",
+                    "status": "skipped",
+                    "reason": "Retry response could not be parsed; keeping original recommendations.",
                     "error": str(exc),
                     "ranks": unjustified_ranks,
                 }
@@ -1665,9 +1666,23 @@ class ForagerAgent:
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
-            # Nemotron occasionally returns Python-style dict literals on retries.
-            # Safely parse those and re-serialize to strict JSON-compatible types.
+            pass
+
+        # Nemotron occasionally returns Python-style dict literals on retries.
+        # Try ast.literal_eval, then a more aggressive JSON-compat cleanup.
+        try:
             parsed = ast.literal_eval(cleaned)
-            if not isinstance(parsed, dict):
-                raise
-            return json.loads(json.dumps(parsed))
+            if isinstance(parsed, dict):
+                return json.loads(json.dumps(parsed))
+        except (ValueError, SyntaxError):
+            pass
+
+        # Final cleanup: drop trailing commas, replace JS-only literals.
+        cleaned2 = re.sub(r",\s*([\]}])", r"\1", cleaned)
+        cleaned2 = re.sub(r"\b(Infinity|-Infinity|NaN|undefined)\b", "null", cleaned2)
+        try:
+            return json.loads(cleaned2)
+        except json.JSONDecodeError as exc:
+            raise json.JSONDecodeError(
+                f"Model returned malformed JSON: {exc.msg}", cleaned, 0
+            ) from exc

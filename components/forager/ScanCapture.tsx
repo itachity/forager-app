@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Camera, ImageUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EyebrowLabel } from "./EyebrowLabel";
+import { useT } from "@/lib/forager-i18n-context";
 
 export type ScanCaptureMode = "food" | "menu";
 
@@ -29,6 +30,7 @@ export function ScanCapture({
   loadingDetail?: string;
 }) {
   const id = useId();
+  const { t } = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function ScanCapture({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
-              alt="Upload preview"
+              alt={t("capture.uploadPreview")}
               className="w-full h-full object-cover"
             />
           ) : (
@@ -124,7 +126,7 @@ export function ScanCapture({
             <Loader2 className="animate-spin" />
 
             <p className="font-medium mt-2">
-              {loadingMessage ?? "Analyzing…"}
+              {loadingMessage ?? t("capture.analyzing")}
             </p>
 
             {loadingDetail && (
@@ -146,7 +148,7 @@ export function ScanCapture({
             disabled={busy}
           >
             <Camera />
-            Camera
+            {t("capture.camera")}
           </Button>
 
           <Button
@@ -158,14 +160,12 @@ export function ScanCapture({
             disabled={busy}
           >
             <ImageUp />
-            Upload
+            {t("capture.upload")}
           </Button>
         </div>
 
         <p className="mt-3 text-center text-xs text-muted-foreground">
-          {busy
-            ? "Processing image… you can upload another menu after this finishes."
-            : "Tip: upload a full-page menu photo with clear prices for best results."}
+          {busy ? t("capture.processing") : t("capture.tip")}
         </p>
       </div>
 
