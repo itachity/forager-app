@@ -161,6 +161,12 @@ export function ScanCapture({
             Upload
           </Button>
         </div>
+
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          {busy
+            ? "Processing image… you can upload another menu after this finishes."
+            : "Tip: upload a full-page menu photo with clear prices for best results."}
+        </p>
       </div>
 
       <input
