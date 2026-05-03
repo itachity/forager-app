@@ -330,3 +330,17 @@ export function phrasesForProfile(opts: {
   out.push(set.water, set.bill, set.thankYou);
   return out;
 }
+
+export function languageCodeFromDetectedLanguage(value: string | null | undefined): LanguageCode | null {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+
+  if (["ja", "jp", "japanese", "nihongo", "日本語", "japan"].includes(normalized)) return "ja";
+  if (["zh", "chinese", "mandarin", "中文", "汉语", "漢語"].includes(normalized)) return "zh";
+  if (["es", "spanish", "español", "espanol"].includes(normalized)) return "es";
+  if (["tl", "tagalog", "filipino", "pilipino"].includes(normalized)) return "tl";
+  if (["ru", "russian", "русский"].includes(normalized)) return "ru";
+  if (["en", "english"].includes(normalized)) return "en";
+
+  return null;
+}

@@ -16,9 +16,29 @@ import { Button } from "@/components/ui/button";
 import { AllergenFlag, intersectAllergens } from "./AllergenFlag";
 import { SafetyNote } from "./SafetyNote";
 import { useToast } from "./ToastProvider";
-import { phrasesForProfile } from "@/lib/forager-phrases";
+import { languageCodeFromDetectedLanguage, phrasesForProfile } from "@/lib/forager-phrases";
 import { LANGUAGE_DISPLAY_NAME } from "@/lib/forager-mappings";
 import type { AnalyzeMenuResponse, UserProfile } from "@/lib/forager-types";
+
+function localOrderLine(language: string, dishName: string) {
+  const normalized = language.trim().toLowerCase();
+  if (normalized.includes("japanese") || normalized === "ja" || normalized === "jp") {
+    return `これをお願いします：${dishName}`;
+  }
+  if (normalized.includes("chinese") || normalized === "zh") {
+    return `请给我这个：${dishName}`;
+  }
+  if (normalized.includes("spanish") || normalized === "es") {
+    return `Quisiera pedir esto: ${dishName}`;
+  }
+  if (normalized.includes("tagalog") || normalized === "tl") {
+    return `Gusto ko po ito: ${dishName}`;
+  }
+  if (normalized.includes("russian") || normalized === "ru") {
+    return `Можно мне это: ${dishName}`;
+  }
+  return `I'd like to order this: ${dishName}`;
+}
 
 export function ScanMenuResult({
   data,
@@ -38,16 +58,22 @@ export function ScanMenuResult({
     profile.language.explainCulturalNorms && data.overallCulturalNorms.length > 0;
 
   const phrases = useMemo(
-    () =>
+    () => {
+      const phraseLanguage =
+        languageCodeFromDetectedLanguage(data.detectedLanguage) ?? profile.language.preferredLanguage;
+
+      return (
       phrasesForProfile({
-        language: profile.language.preferredLanguage,
+        language: phraseLanguage,
         allergens: profile.dietary.allergens,
         vegetarian: profile.dietary.dietRules.vegetarian,
         vegan: profile.dietary.dietRules.vegan,
         glutenFree: profile.dietary.dietRules.glutenFree,
         dairyFree: profile.dietary.dietRules.dairyFree,
-      }),
-    [profile]
+      })
+      );
+    },
+    [data.detectedLanguage, profile]
   );
 
   const copy = async (id: string, text: string) => {
@@ -144,6 +170,25 @@ export function ScanMenuResult({
                   </div>
                 )}
 
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="rounded-xl bg-muted/40 p-2.5">
+                    <p className="uppercase tracking-wider text-muted-foreground">Calories</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.calories ?? "Est. unavailable"}</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/40 p-2.5">
+                    <p className="uppercase tracking-wider text-muted-foreground">Protein</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.protein ?? "Est. unavailable"}</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/40 p-2.5">
+                    <p className="uppercase tracking-wider text-muted-foreground">Carbs</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.carbs ?? "Est. unavailable"}</p>
+                  </div>
+                  <div className="rounded-xl bg-muted/40 p-2.5">
+                    <p className="uppercase tracking-wider text-muted-foreground">Fat</p>
+                    <p className="mt-1 font-semibold">{item.estimatedMacros?.fat ?? "Est. unavailable"}</p>
+                  </div>
+                </div>
+
                 {item.phraseToOrder && (
                   <div className="mt-2 flex gap-2 rounded-2xl bg-accent-soft p-3">
                     <MessageCircle size={16} className="text-accent mt-0.5 shrink-0" />
@@ -152,6 +197,11 @@ export function ScanMenuResult({
                         Say to the server
                       </p>
                       <p className="text-sm mt-1 font-medium">&ldquo;{item.phraseToOrder}&rdquo;</p>
+                      {item.originalName && (
+                        <p className="text-xs mt-1 text-muted-foreground">
+                          {localOrderLine(data.detectedLanguage, item.originalName)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -204,15 +254,6 @@ export function ScanMenuResult({
                 })}
               </ul>
             )}
-          </div>
-        )}
-
-        {data.prose && (
-          <div className="forager-card p-5">
-            <h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-              Forager&rsquo;s notes
-            </h2>
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{data.prose}</p>
           </div>
         )}
 

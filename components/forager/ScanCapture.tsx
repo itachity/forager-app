@@ -136,6 +136,8 @@ export function ScanCapture({
         )}
       </div>
 
+      <div className="fixed inset-x-0 bottom-0 z-20 px-5 pb-5 pt-4 bg-gradient-to-t from-background via-background/95 to-background/0">
+      <div className="max-w-xl mx-auto grid grid-cols-2 gap-3">
       <div className="fixed inset-x-0 bottom-0 z-50 px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-6 bg-gradient-to-t from-background via-background/95 to-background/0 pointer-events-none">
         <div className="max-w-xl mx-auto grid grid-cols-2 gap-3 pointer-events-auto">
           <Button
@@ -161,6 +163,11 @@ export function ScanCapture({
             Upload
           </Button>
         </div>
+        <p className="mt-3 text-center text-xs text-muted-foreground">
+          {busy
+            ? "Processing image… you can upload another menu after this finishes."
+            : "Tip: upload a full-page menu photo with clear prices for best results."}
+        </p>
       </div>
 
       <input

@@ -262,6 +262,12 @@ export type MenuItem = {
   category?: string;
   goalFitScore?: number;
   riskFlags?: { calorieRisk?: string; carbRisk?: string; fatRisk?: string };
+  estimatedMacros?: {
+    calories?: string;
+    protein?: string;
+    carbs?: string;
+    fat?: string;
+  };
 };
 
 export type AnalyzeMenuResponse = {
